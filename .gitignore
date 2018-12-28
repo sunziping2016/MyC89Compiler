@@ -1,0 +1,7 @@
+.idea
+build
+cmake-build-*
+src/syntax/parser.cpp
+src/syntax/parser.hpp
+src/syntax/scanner.cpp
+src/syntax/stack.hh
