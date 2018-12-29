@@ -3,6 +3,7 @@
 
 %define parser_class_name {Parser}
 %define api.namespace {c89c}
+%define api.value.type variant
 
 %parse-param {c89c::Scanner &scanner}
 
@@ -20,8 +21,8 @@
     #define yylex scanner.lex
 }
 
-%token END 0
-%token IDENTIFIER CONSTANT STRING_LITERAL SIZEOF
+%token <std::string> IDENTIFIER
+%token CONSTANT STRING_LITERAL SIZEOF
 %token PTR_OP INC_OP DEC_OP LEFT_OP RIGHT_OP LE_OP GE_OP EQ_OP NE_OP
 %token AND_OP OR_OP MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN ADD_ASSIGN
 %token SUB_ASSIGN LEFT_ASSIGN RIGHT_ASSIGN AND_ASSIGN
@@ -33,11 +34,14 @@
 
 %token CASE DEFAULT IF ELSE SWITCH WHILE DO FOR GOTO CONTINUE BREAK RETURN
 
+%nonassoc THEN
+%nonassoc ELSE
+
 %start translation_unit
 %%
 
 primary_expression
-	: IDENTIFIER
+	: IDENTIFIER          {std::cout << $1 << std::endl; }
 	| CONSTANT
 	| STRING_LITERAL
 	| '(' expression ')'
@@ -400,7 +404,7 @@ expression_statement
 	;
 
 selection_statement
-	: IF '(' expression ')' statement
+	: IF '(' expression ')' statement                     %prec THEN
 	| IF '(' expression ')' statement ELSE statement
 	| SWITCH '(' expression ')' statement
 	;
