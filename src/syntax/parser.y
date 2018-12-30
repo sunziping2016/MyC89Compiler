@@ -443,6 +443,6 @@ function_definition
 
 %%
 
-void c89c::Parser::error(const std::string &message) {
-    std::cerr << "Error: " << message << std::endl;
+void c89c::Parser::error(const std::string &msg) {
+    std::cerr << "c89c: " << scanner.position() << ": syntax error: " << msg << std::endl;
 }

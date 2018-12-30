@@ -19,105 +19,200 @@ FS                      (f|F|l|L)
 IS                      (u|U|l|L)*
 
 %{
+#define NC column_number += yyleng
 %}
 
 %%
-"/*"                    {}
+"/*"                    {
+    char c, prev = 0;
+	while ((c = yyinput()) != 0 && (c != '/' || prev != '*')) {
+	    if (c == '\n') {
+	        ++line_number;
+	        column_number = 1;
+	    } else
+	        ++column_number;
+		prev = c;
+	}
+	if (c == 0)
+	    error("unterminated comment");
+}
 
-"auto"                  return token::AUTO;
-"break"                 return token::BREAK;
-"case"                  return token::CASE;
-"char"                  return token::CHAR;
-"const"                 return token::CONST;
-"continue"              return token::CONTINUE;
-"default"               return token::DEFAULT;
-"do"                    return token::DO;
-"double"                return token::DOUBLE;
-"else"                  return token::ELSE;
-"enum"                  return token::ENUM;
-"extern"                return token::EXTERN;
-"float"                 return token::FLOAT;
-"for"                   return token::FOR;
-"goto"                  return token::GOTO;
-"if"                    return token::IF;
-"int"                   return token::INT;
-"long"                  return token::LONG;
-"register"              return token::REGISTER;
-"return"                return token::RETURN;
-"short"                 return token::SHORT;
-"signed"                return token::SIGNED;
-"sizeof"                return token::SIZEOF;
-"static"                return token::STATIC;
-"struct"                return token::STRUCT;
-"switch"                return token::SWITCH;
-"typedef"               return token::TYPEDEF;
-"union"                 return token::UNION;
-"unsigned"              return token::UNSIGNED;
-"void"                  return token::VOID;
-"volatile"              return token::VOLATILE;
-"while"                 return token::WHILE;
+"//"[^\n]*      NC;
 
-{L}({L}|{D})*           value->emplace<std::string>(yytext); return token::IDENTIFIER;
+"#"[ \t\f]+{D}+[ \t\f]+\"(\\.|[^\\"\n])*\"([ \t\f]+[1234])*	{
+    NC;
+    int begin = 1, end = yyleng;
+    line_number = 0;
+    column_number = 1;
+    while (begin < end && isspace(yytext[begin])) ++begin;
+    while (begin < end && isdigit(yytext[begin]))
+        line_number = line_number * 10 + (yytext[begin++] - '0');
+    --line_number;
+    filename.clear();
+    while (begin < end && yytext[begin] != '\"') ++begin;
+    ++begin;
+    while (begin < end && yytext[end] != '\"') --end;
+    while (begin < end) {
+        char ch;
+        begin = parseEscape(yytext, begin, end, ch);
+        filename.push_back(ch);
+    }
+}
 
-0[xX]{H}+{IS}?          return token::CONSTANT;
-0{D}+{IS}?              return token::CONSTANT;
-{D}+{IS}?               return token::CONSTANT;
-L?'(\\.|[^\\'])+'       return token::CONSTANT;
+"auto"                  NC; return token::AUTO;
+"break"                 NC; return token::BREAK;
+"case"                  NC; return token::CASE;
+"char"                  NC; return token::CHAR;
+"const"                 NC; return token::CONST;
+"continue"              NC; return token::CONTINUE;
+"default"               NC; return token::DEFAULT;
+"do"                    NC; return token::DO;
+"double"                NC; return token::DOUBLE;
+"else"                  NC; return token::ELSE;
+"enum"                  NC; return token::ENUM;
+"extern"                NC; return token::EXTERN;
+"float"                 NC; return token::FLOAT;
+"for"                   NC; return token::FOR;
+"goto"                  NC; return token::GOTO;
+"if"                    NC; return token::IF;
+"int"                   NC; return token::INT;
+"long"                  NC; return token::LONG;
+"register"              NC; return token::REGISTER;
+"return"                NC; return token::RETURN;
+"short"                 NC; return token::SHORT;
+"signed"                NC; return token::SIGNED;
+"sizeof"                NC; return token::SIZEOF;
+"static"                NC; return token::STATIC;
+"struct"                NC; return token::STRUCT;
+"switch"                NC; return token::SWITCH;
+"typedef"               NC; return token::TYPEDEF;
+"union"                 NC; return token::UNION;
+"unsigned"              NC; return token::UNSIGNED;
+"void"                  NC; return token::VOID;
+"volatile"              NC; return token::VOLATILE;
+"while"                 NC; return token::WHILE;
 
-{D}+{E}{FS}?            return token::CONSTANT;
-{D}*"."{D}+({E})?{FS}?  return token::CONSTANT;
-{D}+"."{D}*({E})?{FS}?  return token::CONSTANT;
+{L}({L}|{D})*           {
+    NC;
+    value->emplace<std::string>(yytext);
+    return token::IDENTIFIER;
+}
 
-L?\"(\\.|[^\\"])*\"     return token::STRING_LITERAL;
+0[xX]{H}+{IS}?          NC; return token::CONSTANT;
+0{D}+{IS}?              NC; return token::CONSTANT;
+{D}+{IS}?               NC; return token::CONSTANT;
+L?'(\\.|[^\\'])+'       NC; return token::CONSTANT;
 
-"..."                   return token::ELLIPSIS;
-">>="                   return token::RIGHT_ASSIGN;
-"<<="                   return token::LEFT_ASSIGN;
-"+="                    return token::ADD_ASSIGN;
-"-="                    return token::SUB_ASSIGN;
-"*="                    return token::MUL_ASSIGN;
-"/="                    return token::DIV_ASSIGN;
-"%="                    return token::MOD_ASSIGN;
-"&="                    return token::AND_ASSIGN;
-"^="                    return token::XOR_ASSIGN;
-"|="                    return token::OR_ASSIGN;
-">>"                    return token::RIGHT_OP;
-"<<"                    return token::LEFT_OP;
-"++"                    return token::INC_OP;
-"--"                    return token::DEC_OP;
-"->"                    return token::PTR_OP;
-"&&"                    return token::AND_OP;
-"||"                    return token::OR_OP;
-"<="                    return token::LE_OP;
-">="                    return token::GE_OP;
-"=="                    return token::EQ_OP;
-"!="                    return token::NE_OP;
-";"                     return ';';
-("{"|"<%")              return '{';
-("}"|"%>")              return '}';
-","                     return ',';
-":"                     return ':';
-"="                     return '=';
-"("                     return '(';
-")"                     return ')';
-("["|"<:")              return '[';
-("]"|":>")              return ']';
-"."                     return '.';
-"&"                     return '&';
-"!"                     return '!';
-"~"                     return '~';
-"-"                     return '-';
-"+"                     return '+';
-"*"                     return '*';
-"/"                     return '/';
-"%"                     return '%';
-"<"                     return '<';
-">"                     return '>';
-"^"                     return '^';
-"|"                     return '|';
-"?"                     return '?';
+{D}+{E}{FS}?            NC; return token::CONSTANT;
+{D}*"."{D}+({E})?{FS}?  NC; return token::CONSTANT;
+{D}+"."{D}*({E})?{FS}?  NC; return token::CONSTANT;
 
-[ \t\v\n\f]             ;
-.                       {}
+L?\"(\\.|[^\\"])*\"     NC; return token::STRING_LITERAL;
+
+"..."                   NC; return token::ELLIPSIS;
+">>="                   NC; return token::RIGHT_ASSIGN;
+"<<="                   NC; return token::LEFT_ASSIGN;
+"+="                    NC; return token::ADD_ASSIGN;
+"-="                    NC; return token::SUB_ASSIGN;
+"*="                    NC; return token::MUL_ASSIGN;
+"/="                    NC; return token::DIV_ASSIGN;
+"%="                    NC; return token::MOD_ASSIGN;
+"&="                    NC; return token::AND_ASSIGN;
+"^="                    NC; return token::XOR_ASSIGN;
+"|="                    NC; return token::OR_ASSIGN;
+">>"                    NC; return token::RIGHT_OP;
+"<<"                    NC; return token::LEFT_OP;
+"++"                    NC; return token::INC_OP;
+"--"                    NC; return token::DEC_OP;
+"->"                    NC; return token::PTR_OP;
+"&&"                    NC; return token::AND_OP;
+"||"                    NC; return token::OR_OP;
+"<="                    NC; return token::LE_OP;
+">="                    NC; return token::GE_OP;
+"=="                    NC; return token::EQ_OP;
+"!="                    NC; return token::NE_OP;
+";"                     NC; return ';';
+("{"|"<%")              NC; return '{';
+("}"|"%>")              NC; return '}';
+","                     NC; return ',';
+":"                     NC; return ':';
+"="                     NC; return '=';
+"("                     NC; return '(';
+")"                     NC; return ')';
+("["|"<:")              NC; return '[';
+("]"|":>")              NC; return ']';
+"."                     NC; return '.';
+"&"                     NC; return '&';
+"!"                     NC; return '!';
+"~"                     NC; return '~';
+"-"                     NC; return '-';
+"+"                     NC; return '+';
+"*"                     NC; return '*';
+"/"                     NC; return '/';
+"%"                     NC; return '%';
+"<"                     NC; return '<';
+">"                     NC; return '>';
+"^"                     NC; return '^';
+"|"                     NC; return '|';
+"?"                     NC; return '?';
+
+[ \t\v\f]               NC;
+"\n"                    ++line_number; column_number = 1;
+
+.                       {
+    NC;
+    error(std::string("unexpected character \'") + *yytext + "\' (" + std::to_string((int)*yytext) + ")");
+}
 
 %%
+
+int c89c::Scanner::parseEscape(const char *str, int begin, int end, char &result) {
+    if (str[begin++] != '\\') {
+        result = str[begin - 1];
+        return begin;
+    }
+    if (begin == end) {
+        error("unexpected ending of escape sequence");
+        result = '\\';
+        return begin;
+    }
+    switch (str[begin++]) {
+        case 'a': result = '\a'; return begin;
+        case 'b': result = '\b'; return begin;
+        case 'f': result = '\f'; return begin;
+        case 'n': result = '\n'; return begin;
+        case 'r': result = '\r'; return begin;
+        case 't': result = '\t'; return begin;
+        case 'v': result = '\v'; return begin;
+        case 'x':
+            if (begin == end || !isxdigit(str[begin])) {
+                if (begin == end)
+                    error("unexpected ending of escape sequence");
+                else
+                    error("unknown escape sequence");
+                result = 'x';
+            } else {
+                std::string value;
+                value.push_back(str[begin++]);
+                if (begin != end && isxdigit(str[begin]))
+                    value.push_back(str[begin++]);
+                result = static_cast<char>(std::stoi(value, nullptr, 16));
+            }
+            return begin;
+        case '\'': case '\"': case '\?': case '\\':
+            result = str[begin - 1];
+            return begin;
+        default:
+            if ('0' <= str[begin - 1] && str[begin - 1] <= '7') {
+                std::string value;
+                value.push_back(str[begin - 1]);
+                for (int i = 0; i < 2 && begin != end && '0' <= str[begin] && str[begin] <= '7'; ++i)
+                    value.push_back(str[begin++]);
+                result = static_cast<char>(std::stoi(value, nullptr, 8));
+            } else {
+                error("unknown escape sequence");
+                result = str[begin - 1];
+            }
+            return begin;
+    }
+}
