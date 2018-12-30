@@ -5,3 +5,8 @@ src/syntax/parser.cpp
 src/syntax/parser.hpp
 src/syntax/scanner.cpp
 src/syntax/stack.hh
+*-c89c.c
+*-c89c.ll
+*-c89c.s
+*-llvm.ll
+*-llvm.s

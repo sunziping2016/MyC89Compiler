@@ -5,17 +5,21 @@
 %define api.namespace {c89c}
 %define api.value.type variant
 
-%parse-param {c89c::Scanner &scanner}
+%parse-param {c89c::Scanner &scanner} {c89c::Driver &driver}
 
 %error-verbose
 
 %code requires
 {
-    namespace c89c { class Scanner; }
+    namespace c89c {
+        class Driver;
+        class Scanner;
+    }
 }
 
 %code top
 {
+    #include "../ast/driver.h"
     #include "scanner.h"
 
     #define yylex scanner.lex
