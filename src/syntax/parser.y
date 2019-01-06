@@ -4,6 +4,7 @@
 %define parser_class_name {Parser}
 %define api.namespace {c89c}
 %define api.value.type variant
+%define api.value.automove
 
 %parse-param {c89c::Scanner &scanner} {c89c::Driver &driver}
 
@@ -11,6 +12,9 @@
 
 %code requires
 {
+    #include "../ast/type.h"
+    #include "../ast/declaration.h"
+
     namespace c89c {
         class Driver;
         class Scanner;
@@ -19,10 +23,22 @@
 
 %code top
 {
-    #include "../ast/driver.h"
+    #include <memory>
+
+    #include "../ast/error.h"
     #include "scanner.h"
 
     #define yylex scanner.lex
+
+    using namespace c89c;
+
+    #define BEG     try {
+    #define END     } catch (SemanticError &err) {                                      \
+                        std::cerr << scanner.position() << ": " << err << std::endl;    \
+                        YYABORT;                                                        \
+                    } catch (SemanticWarning &warn) {                                   \
+                        std::cerr << scanner.position() << ": " << warn << std::endl;   \
+                    }
 }
 
 %token <std::string> IDENTIFIER
@@ -30,13 +46,19 @@
 %token PTR_OP INC_OP DEC_OP LEFT_OP RIGHT_OP LE_OP GE_OP EQ_OP NE_OP
 %token AND_OP OR_OP MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN ADD_ASSIGN
 %token SUB_ASSIGN LEFT_ASSIGN RIGHT_ASSIGN AND_ASSIGN
-%token XOR_ASSIGN OR_ASSIGN TYPE_NAME
+%token XOR_ASSIGN OR_ASSIGN
+%token <std::unique_ptr<Type>> TYPE_NAME
 
 %token TYPEDEF EXTERN STATIC AUTO REGISTER
 %token CHAR SHORT INT LONG SIGNED UNSIGNED FLOAT DOUBLE CONST VOLATILE VOID
 %token STRUCT UNION ENUM ELLIPSIS
 
 %token CASE DEFAULT IF ELSE SWITCH WHILE DO FOR GOTO CONTINUE BREAK RETURN
+
+%type <StorageClassSpecifier> storage_class_specifier
+%type <TypeSpecifier> type_specifier
+%type <TypeQualifier> type_qualifier
+%type <DeclarationSpecifiers> declaration_specifiers
 
 %nonassoc THEN
 %nonassoc ELSE
@@ -45,7 +67,7 @@
 %%
 
 primary_expression
-	: IDENTIFIER          {std::cout << $1 << std::endl; }
+	: IDENTIFIER
 	| CONSTANT
 	| STRING_LITERAL
 	| '(' expression ')'
@@ -187,12 +209,12 @@ declaration
 	;
 
 declaration_specifiers
-	: storage_class_specifier
-	| storage_class_specifier declaration_specifiers
-	| type_specifier
-	| type_specifier declaration_specifiers
-	| type_qualifier
-	| type_qualifier declaration_specifiers
+	: storage_class_specifier                           { BEG $$.add($1);          END }
+	| storage_class_specifier declaration_specifiers    { BEG $$ = $2; $$.add($1); END }
+	| type_specifier                                    { BEG $$.add($1);          END }
+	| type_specifier declaration_specifiers             { BEG $$ = $2; $$.add($1); END }
+	| type_qualifier                                    { BEG $$.add($1);          END }
+	| type_qualifier declaration_specifiers             { BEG $$ = $2; $$.add($1); END }
 	;
 
 init_declarator_list
@@ -206,26 +228,26 @@ init_declarator
 	;
 
 storage_class_specifier
-	: TYPEDEF
-	| EXTERN
-	| STATIC
-	| AUTO
-	| REGISTER
+	: TYPEDEF           { $$.set(StorageClassSpecifier::TYPEDEF); }
+	| EXTERN            { $$.set(StorageClassSpecifier::EXTERN); }
+	| STATIC            { $$.set(StorageClassSpecifier::STATIC); }
+	| AUTO              { $$.set(StorageClassSpecifier::AUTO); }
+	| REGISTER          { $$.set(StorageClassSpecifier::REGISTER); }
 	;
 
 type_specifier
-	: VOID
-	| CHAR
-	| SHORT
-	| INT
-	| LONG
-	| FLOAT
-	| DOUBLE
-	| SIGNED
-	| UNSIGNED
-	| struct_or_union_specifier
-	| enum_specifier
-	| TYPE_NAME
+	: VOID                      { $$.set(TypeSpecifier::VOID); }
+	| CHAR                      { $$.set(TypeSpecifier::CHAR); }
+	| SHORT                     { $$.set(TypeSpecifier::SHORT); }
+	| INT                       { $$.set(TypeSpecifier::INT); }
+	| LONG                      { $$.set(TypeSpecifier::LONG); }
+	| FLOAT                     { $$.set(TypeSpecifier::FLOAT); }
+	| DOUBLE                    { $$.set(TypeSpecifier::DOUBLE); }
+	| SIGNED                    { $$.set(TypeSpecifier::SIGNED); }
+	| UNSIGNED                  { $$.set(TypeSpecifier::UNSIGNED); }
+	| struct_or_union_specifier { $$.set(TypeSpecifier::STRUCT_OR_UNION); }
+	| enum_specifier            { $$.set(TypeSpecifier::ENUM); }
+	| TYPE_NAME                 { $$.set(TypeSpecifier::TYPENAME, std::move($1)); }
 	;
 
 struct_or_union_specifier
@@ -283,8 +305,8 @@ enumerator
 	;
 
 type_qualifier
-	: CONST
-	| VOLATILE
+	: CONST     { $$.set(TypeQualifier::CONST); }
+	| VOLATILE  { $$.set(TypeQualifier::VOLATILE); }
 	;
 
 declarator
@@ -448,5 +470,5 @@ function_definition
 %%
 
 void c89c::Parser::error(const std::string &msg) {
-    std::cerr << "c89c: " << scanner.position() << ": syntax error: " << msg << std::endl;
+    std::cerr << scanner.position() << ": syntax error: " << msg << std::endl;
 }

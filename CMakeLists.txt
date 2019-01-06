@@ -15,7 +15,9 @@ add_executable(c89c
         src/main.cpp
         src/syntax/scanner.h
         src/ast/driver.h
-        src/ast/driver.cpp)
+        src/ast/driver.cpp
+        src/ast/type.h
+        src/ast/declaration.h src/ast/declaration.cpp src/ast/error.h)
 
 find_package(LLVM REQUIRED CONFIG)
 

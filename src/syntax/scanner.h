@@ -38,7 +38,7 @@ namespace c89c {
         }
     protected:
         void error(const std::string &msg) {
-            std::cerr << "c89c: " << position() << ": syntax error: " << msg << std::endl;
+            std::cerr << position() << ": syntax error: " << msg << std::endl;
         }
         int parseEscape(const char *str, int begin, int end, char &result);
 

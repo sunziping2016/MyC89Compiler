@@ -44,10 +44,11 @@ int main(int argc, char *argv[]) {
     c89c::Driver driver(input_filename);
     c89c::Scanner scanner(input.get(), input_filename);
     c89c::Parser parser(scanner, driver);
-    parser.parse();
-    if (output)
-        driver.output(*output);
-    else
-        driver.output(llvm::outs());
+    if (!parser.parse()) {
+        if (output)
+            driver.output(*output);
+        else
+            driver.output(llvm::outs());
+    }
     return 0;
 }
