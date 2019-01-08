@@ -5,8 +5,13 @@
 
 %{
 #include <string>
+#include <cstdint>
+
+#include <llvm/ADT/APInt.h>
 
 #include "scanner.h"
+#include "../ast/type.h"
+#include "../ast/expression.h"
 
 typedef c89c::Parser::token token;
 %}
@@ -98,10 +103,58 @@ IS                      (u|U|l|L)*
     return token::IDENTIFIER;
 }
 
-0[xX]{H}+{IS}?          NC; return token::CONSTANT;
-0{D}+{IS}?              NC; return token::CONSTANT;
-{D}+{IS}?               NC; return token::CONSTANT;
-L?'(\\.|[^\\'])+'       NC; return token::CONSTANT;
+(0[xX]{H}+|{D}+){IS}?   {
+    // https://en.cppreference.com/w/c/language/integer_constant
+    NC;
+    bool is_unsigned = false, is_long = false;
+    std::string input(yytext, yyleng);
+    while (true) {
+        if (input.back() == 'u' || input.back() == 'U')
+            is_unsigned = true;
+        else if (input.back() == 'l' || input.back() == 'L')
+            is_long = true;
+        else
+            break;
+        input.pop_back();
+    }
+    uint64_t v = std::stoul(input);
+    bool hex_octal = input[0] == '0';
+    llvm::APInt ap;
+    BasicType::TypeFlag type;
+    if ((is_unsigned && is_long) ||
+            (!is_unsigned && v > INT64_MAX) ||
+            (is_unsigned && v > UINT32_MAX)) {
+        ap = llvm::APInt(64, v, false);
+        type = BasicType::UNSIGNED_LONG;
+    } else if (is_long || (!is_unsigned && (
+            (hex_octal && v > UINT32_MAX) ||
+            (!hex_octal && v > INT32_MAX)))) {
+        ap = llvm::APInt(64, v, true);
+        type = BasicType::LONG;
+    } else if (is_unsigned || (hex_octal && v > INT32_MAX)) {
+        ap = llvm::APInt(32, v, false);
+        type = BasicType::UNSIGNED_INT;
+    } else {
+        ap = llvm::APInt(32, v, true);
+        type = BasicType::INT;
+    }
+    value->emplace<std::unique_ptr<Expression>>(new IntegerConstant(
+        ap, std::unique_ptr<BasicType>(new BasicType(type))));
+    return token::CONSTANT;
+}
+
+L?'(\\.|[^\\'])+'       {
+    // TODO: L support (needs convert from utf-8 to unicode)
+    NC;
+    int v = 0, begin = 1;
+    char ch;
+    while ((begin = parseEscape(yytext, begin, yyleng - 1, ch)) != yyleng - 1) {
+        v = (v << 8) + static_cast<unsigned char>(ch);
+    }
+    v = (v << 8) + static_cast<unsigned char>(ch);
+    value->emplace<std::unique_ptr<Expression>>(new CharacterConstant(v));
+    return token::CONSTANT;
+}
 
 {D}+{E}{FS}?            NC; return token::CONSTANT;
 {D}*"."{D}+({E})?{FS}?  NC; return token::CONSTANT;

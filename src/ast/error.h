@@ -1,7 +1,7 @@
 #ifndef MYC89COMPILER_ERROR_H
 #define MYC89COMPILER_ERROR_H
 
-#include <iostream>
+#include  <iostream>
 #include <stdexcept>
 
 namespace c89c {
@@ -13,10 +13,7 @@ namespace c89c {
         }
     };
 
-    inline std::ostream &operator << (std::ostream &out, const SemanticError &err) {
-        out << err.name() << ": " << err.what();
-        return out;
-    }
+    std::ostream &operator << (std::ostream &out, const SemanticError &err);
 
     class SemanticWarning: public std::runtime_error {
     public:
@@ -26,10 +23,7 @@ namespace c89c {
         }
     };
 
-    inline std::ostream &operator << (std::ostream &out, const SemanticWarning &err) {
-        out << err.name() << ": " << err.what();
-        return out;
-    }
+    std::ostream &operator << (std::ostream &out, const SemanticWarning &err);
 }
 
 #endif //MYC89COMPILER_ERROR_H

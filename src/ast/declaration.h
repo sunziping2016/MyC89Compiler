@@ -1,11 +1,15 @@
 #ifndef MYC89COMPILER_DECLARATION_H
 #define MYC89COMPILER_DECLARATION_H
 
+#include <cstdint>
 #include <bitset>
 #include <memory>
+#include <string>
+#include <cassert>
 
 namespace c89c {
     class Type;
+    class Expression;
 
     class TypeSpecifier {
         friend class DeclarationSpecifiers;
@@ -38,6 +42,7 @@ namespace c89c {
 
     class TypeQualifier {
         friend class DeclarationSpecifiers;
+        friend class TypeQualifierList;
 
     public:
         enum TypeQualifierFlag {CONST, VOLATILE};
@@ -62,11 +67,75 @@ namespace c89c {
         void add(TypeSpecifier &&specifier);
         void add(TypeQualifier &&qualifier);
 
+        std::unique_ptr<Type> getType() const;
     private:
         StorageClassSpecifier::StorageClassSpecifierFlag m_storage_class;
         std::bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG> m_type_specifiers;
         bool m_const, m_volatile;
         std::unique_ptr<Type> m_type;
+    };
+
+    class TypeQualifierList {
+        friend class PointerDeclarator;
+    public:
+        void add(TypeQualifier &&qualifier);
+
+    private:
+        bool m_const, m_volatile;
+    };
+
+    class Declarator {
+    public:
+        virtual const std::string &identifier() const = 0;
+
+        virtual std::unique_ptr<Type> getType(std::unique_ptr<Type> &&base_type) const = 0;
+        virtual void setBase(std::unique_ptr<Declarator> &&base) = 0;
+    };
+
+    class PointerDeclarator: public Declarator {
+    public:
+        PointerDeclarator(): m_const(false), m_volatile(false) {}
+        explicit PointerDeclarator(TypeQualifierList &&list): m_const(list.m_const), m_volatile(list.m_volatile) {}
+
+        const std::string &identifier() const override;
+        std::unique_ptr<Type> getType(std::unique_ptr<Type> &&base_type) const override;
+        void setBase(std::unique_ptr<Declarator> &&base) override;
+    private:
+        std::unique_ptr<Declarator> m_base;
+        bool m_const, m_volatile;
+    };
+
+    class IdentifierDeclarator: public Declarator {
+    public:
+        explicit IdentifierDeclarator(std::string identifier = ""): m_identifier(std::move(identifier)) {}
+
+        const std::string &identifier() const override {
+            return m_identifier;
+        }
+
+        std::unique_ptr<Type> getType(std::unique_ptr<Type> &&base_type) const override {
+            return std::move(base_type);
+        }
+        void setBase(std::unique_ptr<Declarator> &&base) override {
+            assert(0);
+        }
+
+    private:
+        std::string m_identifier;
+    };
+
+    class ArrayDeclarator: public Declarator {
+    public:
+        ArrayDeclarator(): m_num(0), m_incomplete(true) {}
+        explicit ArrayDeclarator(std::unique_ptr<Expression> &&expression);
+
+        const std::string &identifier() const override;
+        std::unique_ptr<Type> getType(std::unique_ptr<Type> &&base_type) const override;
+        void setBase(std::unique_ptr<Declarator> &&base) override;
+    private:
+        std::unique_ptr<Declarator> m_base;
+        uint64_t m_num;
+        bool m_incomplete;
     };
 }
 

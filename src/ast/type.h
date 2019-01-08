@@ -15,12 +15,8 @@ namespace c89c {
         Type(): m_const(false), m_volatile(false) {}
 
         virtual ~Type() = default;
-        virtual bool equal(const Type &other) const {
-            return m_const == other.m_const
-                && m_volatile == other.m_volatile
-                && typeid(*this) == typeid(other);
-        }
 
+        virtual Type *clone() const = 0;
         virtual llvm::Type *generate(llvm::LLVMContext &context) const = 0;
 
         bool isConst() const { return m_const; }
@@ -29,73 +25,101 @@ namespace c89c {
         void setConst(bool c) { m_const = c; }
         void setVolatile(bool v) { m_volatile = v; }
 
+        virtual bool isSignedIntegerType() const { return false; }
+        virtual bool isUnsignedIntegerType() const { return false; }
+        virtual bool isIntegerType() const { return false; }
+
     private:
         bool m_const, m_volatile;
     };
 
+    class VoidType: public Type {
+    public:
+        VoidType *clone() const override {
+            return new VoidType(*this);
+        }
+        llvm::Type *generate(llvm::LLVMContext &context) const override {
+            return llvm::Type::getVoidTy(context);
+        }
+    };
+
     class BasicType: public Type {
     public:
-        enum TypeFlag {VOID, CHAR, SIGNED_CHAR, SHORT, INT, LONG, UNSIGNED_CHAR,
+        enum TypeFlag {CHAR, SIGNED_CHAR, SHORT, INT, LONG, UNSIGNED_CHAR,
                 UNSIGNED_SHORT, UNSIGNED_INT, UNSIGNED_LONG,
                 FLOAT, DOUBLE, LONG_DOUBLE};
 
-        explicit BasicType(TypeFlag type): type(type) {}
+        explicit BasicType(TypeFlag type): m_type(type) {}
 
-        bool equal(const Type &other) const override {
-            if (Type::equal(other)) {
-                const auto &other_ref = static_cast<const BasicType &>(other); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-                return type == other_ref.type;
-            }
-            return false;
+        TypeFlag getTypeFlag() {
+            return m_type;
         }
+        BasicType *clone() const override {
+            return new BasicType(*this);
+        }
+        llvm::Type *generate(llvm::LLVMContext &context) const override;
 
-        llvm::Type *generate(llvm::LLVMContext &context) const override {
-            switch (type) {
-                case VOID:
-                    return llvm::Type::getVoidTy(context);
-                case CHAR: case SIGNED_CHAR: case UNSIGNED_CHAR:
-                    return llvm::Type::getInt8Ty(context);
-                case SHORT: case UNSIGNED_SHORT:
-                    return llvm::Type::getInt16Ty(context);
-                case INT: case UNSIGNED_INT:
-                    return llvm::Type::getInt32Ty(context);
-                case LONG: case UNSIGNED_LONG:
-                    return llvm::Type::getInt64Ty(context);
-                case FLOAT:
-                    return llvm::Type::getFloatTy(context);
-                case DOUBLE:
-                    return llvm::Type::getDoubleTy(context);
-                case LONG_DOUBLE:
-                    return llvm::Type::getFP128Ty(context);
-                default:
-                    assert(0);
-            }
+        bool isSignedIntegerType() const override {
+            return m_type == SIGNED_CHAR || m_type == SHORT ||
+                m_type == INT || m_type == LONG;
+        }
+        bool isUnsignedIntegerType() const override {
+            return m_type == UNSIGNED_CHAR || m_type == UNSIGNED_SHORT ||
+                m_type == UNSIGNED_INT || m_type == UNSIGNED_LONG;
+        }
+        bool isIntegerType() const override {
+            return m_type == CHAR || isSignedIntegerType() || isUnsignedIntegerType();
         }
 
     private:
-        TypeFlag type;
+        TypeFlag m_type;
+    };
+
+    class PointerType: public Type {
+    public:
+        explicit PointerType(std::unique_ptr<Type> &&element): m_element(std::move(element)) {}
+        PointerType(const PointerType &other): Type(other), m_element(other.m_element->clone()) {}
+        PointerType &operator = (const PointerType &other) {
+            Type::operator = (other);
+            m_element.reset(other.m_element->clone());
+            return *this;
+        }
+
+        PointerType *clone() const override {
+            return new PointerType(*this);
+        }
+        llvm::Type *generate(llvm::LLVMContext &context) const override {
+            return llvm::PointerType::getUnqual(m_element->generate(context));
+        }
+    private:
+        std::unique_ptr<Type> m_element;
     };
 
     class ArrayType: public Type {
     public:
-        ArrayType(std::unique_ptr<Type> &&element, uint64_t num):
-            element(std::move(element)), num(num) {}
-
-        bool equal(const Type &other) const override {
-            if (Type::equal(other)) {
-                const auto &other_ref = static_cast<const ArrayType &>(other); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-                return num == other_ref.num && element->equal(*other_ref.element);
-            }
-            return false;
+        explicit ArrayType(std::unique_ptr<Type> &&element, uint64_t num = 0, bool incomplete = false):
+                m_element(std::move(element)), m_num(num), m_incomplete(incomplete) {}
+        ArrayType(const ArrayType &other):
+            Type(other), m_element(other.m_element->clone()),
+            m_num(other.m_num), m_incomplete(other.m_incomplete) {}
+        ArrayType &operator = (const ArrayType &other) {
+            Type::operator = (other);
+            m_element.reset(other.m_element->clone());
+            m_num = other.m_num;
+            return *this;
         }
 
+        ArrayType *clone() const override {
+            return new ArrayType(*this);
+        }
         llvm::Type *generate(llvm::LLVMContext &context) const override {
-            return llvm::ArrayType::get(element->generate(context), num);
+            return llvm::ArrayType::get(m_element->generate(context), m_num);
         }
 
     private:
-        std::unique_ptr<Type> element;
-        uint64_t num;
+        std::unique_ptr<Type> m_element;
+        uint64_t m_num;
+        bool m_incomplete;
     };
 }
 

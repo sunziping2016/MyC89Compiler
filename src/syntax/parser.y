@@ -14,6 +14,7 @@
 {
     #include "../ast/type.h"
     #include "../ast/declaration.h"
+    #include "../ast/expression.h"
 
     namespace c89c {
         class Driver;
@@ -30,8 +31,6 @@
 
     #define yylex scanner.lex
 
-    using namespace c89c;
-
     #define BEG     try {
     #define END     } catch (SemanticError &err) {                                      \
                         std::cerr << scanner.position() << ": " << err << std::endl;    \
@@ -42,12 +41,13 @@
 }
 
 %token <std::string> IDENTIFIER
-%token CONSTANT STRING_LITERAL SIZEOF
+%token <std::unique_ptr<c89c::Expression>> CONSTANT
+%token STRING_LITERAL SIZEOF
 %token PTR_OP INC_OP DEC_OP LEFT_OP RIGHT_OP LE_OP GE_OP EQ_OP NE_OP
 %token AND_OP OR_OP MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN ADD_ASSIGN
 %token SUB_ASSIGN LEFT_ASSIGN RIGHT_ASSIGN AND_ASSIGN
 %token XOR_ASSIGN OR_ASSIGN
-%token <std::unique_ptr<Type>> TYPE_NAME
+%token <std::unique_ptr<c89c::Type>> TYPE_NAME
 
 %token TYPEDEF EXTERN STATIC AUTO REGISTER
 %token CHAR SHORT INT LONG SIGNED UNSIGNED FLOAT DOUBLE CONST VOLATILE VOID
@@ -55,10 +55,19 @@
 
 %token CASE DEFAULT IF ELSE SWITCH WHILE DO FOR GOTO CONTINUE BREAK RETURN
 
-%type <StorageClassSpecifier> storage_class_specifier
-%type <TypeSpecifier> type_specifier
-%type <TypeQualifier> type_qualifier
-%type <DeclarationSpecifiers> declaration_specifiers
+%type <c89c::StorageClassSpecifier> storage_class_specifier
+%type <c89c::TypeSpecifier> type_specifier
+%type <c89c::TypeQualifier> type_qualifier
+%type <c89c::DeclarationSpecifiers> declaration_specifiers
+%type <c89c::TypeQualifierList> type_qualifier_list
+
+%type <std::unique_ptr<c89c::Declarator>> declarator direct_declarator pointer
+%type <std::unique_ptr<c89c::Expression>> primary_expression postfix_expression unary_expression
+%type <std::unique_ptr<c89c::Expression>> cast_expression multiplicative_expression additive_expression
+%type <std::unique_ptr<c89c::Expression>> shift_expression relational_expression equality_expression
+%type <std::unique_ptr<c89c::Expression>> and_expression exclusive_or_expression inclusive_or_expression
+%type <std::unique_ptr<c89c::Expression>> logical_and_expression logical_or_expression conditional_expression
+%type <std::unique_ptr<c89c::Expression>> assignment_expression expression constant_expression
 
 %nonassoc THEN
 %nonassoc ELSE
@@ -67,21 +76,21 @@
 %%
 
 primary_expression
-	: IDENTIFIER
-	| CONSTANT
-	| STRING_LITERAL
-	| '(' expression ')'
+	: IDENTIFIER            { $$.reset(new TodoExpression); }
+	| CONSTANT              { $$ = $1; }
+	| STRING_LITERAL        { $$.reset(new TodoExpression); }
+	| '(' expression ')'    { $$ = $2; }
 	;
 
 postfix_expression
-	: primary_expression
-	| postfix_expression '[' expression ']'
-	| postfix_expression '(' ')'
-	| postfix_expression '(' argument_expression_list ')'
-	| postfix_expression '.' IDENTIFIER
-	| postfix_expression PTR_OP IDENTIFIER
-	| postfix_expression INC_OP
-	| postfix_expression DEC_OP
+	: primary_expression                                    { $$ = $1; }
+	| postfix_expression '[' expression ']'                 { $$.reset(new TodoExpression); }
+	| postfix_expression '(' ')'                            { $$.reset(new TodoExpression); }
+	| postfix_expression '(' argument_expression_list ')'   { $$.reset(new TodoExpression); }
+	| postfix_expression '.' IDENTIFIER                     { $$.reset(new TodoExpression); }
+	| postfix_expression PTR_OP IDENTIFIER                  { $$.reset(new TodoExpression); }
+	| postfix_expression INC_OP                             { $$.reset(new TodoExpression); }
+	| postfix_expression DEC_OP                             { $$.reset(new TodoExpression); }
 	;
 
 argument_expression_list
@@ -90,12 +99,12 @@ argument_expression_list
 	;
 
 unary_expression
-	: postfix_expression
-	| INC_OP unary_expression
-	| DEC_OP unary_expression
-	| unary_operator cast_expression
-	| SIZEOF unary_expression
-	| SIZEOF '(' type_name ')'
+	: postfix_expression                { $$ = $1; }
+	| INC_OP unary_expression           { $$.reset(new TodoExpression); }
+	| DEC_OP unary_expression           { $$.reset(new TodoExpression); }
+	| unary_operator cast_expression    { $$.reset(new TodoExpression); }
+	| SIZEOF unary_expression           { $$.reset(new TodoExpression); }
+	| SIZEOF '(' type_name ')'          { $$.reset(new TodoExpression); }
 	;
 
 unary_operator
@@ -108,76 +117,76 @@ unary_operator
 	;
 
 cast_expression
-	: unary_expression
-	| '(' type_name ')' cast_expression
+	: unary_expression                  { $$ = $1; }
+	| '(' type_name ')' cast_expression { $$.reset(new TodoExpression); }
 	;
 
 multiplicative_expression
-	: cast_expression
-	| multiplicative_expression '*' cast_expression
-	| multiplicative_expression '/' cast_expression
-	| multiplicative_expression '%' cast_expression
+	: cast_expression                               { $$ = $1; }
+	| multiplicative_expression '*' cast_expression { $$.reset(new TodoExpression); }
+	| multiplicative_expression '/' cast_expression { $$.reset(new TodoExpression); }
+	| multiplicative_expression '%' cast_expression { $$.reset(new TodoExpression); }
 	;
 
 additive_expression
-	: multiplicative_expression
-	| additive_expression '+' multiplicative_expression
-	| additive_expression '-' multiplicative_expression
+	: multiplicative_expression                         { $$ = $1; }
+	| additive_expression '+' multiplicative_expression { $$.reset(new TodoExpression); }
+	| additive_expression '-' multiplicative_expression { $$.reset(new TodoExpression); }
 	;
 
 shift_expression
-	: additive_expression
-	| shift_expression LEFT_OP additive_expression
-	| shift_expression RIGHT_OP additive_expression
+	: additive_expression                           { $$ = $1; }
+	| shift_expression LEFT_OP additive_expression  { $$.reset(new TodoExpression); }
+	| shift_expression RIGHT_OP additive_expression { $$.reset(new TodoExpression); }
 	;
 
 relational_expression
 	: shift_expression
-	| relational_expression '<' shift_expression
-	| relational_expression '>' shift_expression
-	| relational_expression LE_OP shift_expression
-	| relational_expression GE_OP shift_expression
+	| relational_expression '<' shift_expression    { $$ = $1; }
+	| relational_expression '>' shift_expression    { $$.reset(new TodoExpression); }
+	| relational_expression LE_OP shift_expression  { $$.reset(new TodoExpression); }
+	| relational_expression GE_OP shift_expression  { $$.reset(new TodoExpression); }
 	;
 
 equality_expression
-	: relational_expression
-	| equality_expression EQ_OP relational_expression
-	| equality_expression NE_OP relational_expression
+	: relational_expression                             { $$ = $1; }
+	| equality_expression EQ_OP relational_expression   { $$.reset(new TodoExpression); }
+	| equality_expression NE_OP relational_expression   { $$.reset(new TodoExpression); }
 	;
 
 and_expression
-	: equality_expression
-	| and_expression '&' equality_expression
+	: equality_expression                       { $$ = $1; }
+	| and_expression '&' equality_expression    { $$.reset(new TodoExpression); }
 	;
 
 exclusive_or_expression
-	: and_expression
-	| exclusive_or_expression '^' and_expression
+	: and_expression                                { $$ = $1; }
+	| exclusive_or_expression '^' and_expression    { $$.reset(new TodoExpression); }
 	;
 
 inclusive_or_expression
-	: exclusive_or_expression
-	| inclusive_or_expression '|' exclusive_or_expression
+	: exclusive_or_expression                               { $$ = $1; }
+	| inclusive_or_expression '|' exclusive_or_expression   { $$.reset(new TodoExpression); }
 	;
 
 logical_and_expression
-	: inclusive_or_expression
-	| logical_and_expression AND_OP inclusive_or_expression
+	: inclusive_or_expression                               { $$ = $1; }
+	| logical_and_expression AND_OP inclusive_or_expression { $$.reset(new TodoExpression); }
 	;
 
 logical_or_expression
-	: logical_and_expression
-	| logical_or_expression OR_OP logical_and_expression
+	: logical_and_expression                                { $$ = $1;  }
+	| logical_or_expression OR_OP logical_and_expression    { $$.reset(new TodoExpression); }
 	;
 
 conditional_expression
-	: logical_or_expression
-	| logical_or_expression '?' expression ':' conditional_expression
+	: logical_or_expression                                             { $$ = $1; }
+	| logical_or_expression '?' expression ':' conditional_expression   { $$.reset(new TodoExpression); }
 	;
 
 assignment_expression
-	: conditional_expression
-	| unary_expression assignment_operator assignment_expression
+	: conditional_expression                                        { $$ = $1; }
+	| unary_expression assignment_operator assignment_expression    { $$.reset(new TodoExpression); }
 	;
 
 assignment_operator
@@ -195,12 +204,12 @@ assignment_operator
 	;
 
 expression
-	: assignment_expression
-	| expression ',' assignment_expression
+	: assignment_expression                 { $$ = $1; }
+	| expression ',' assignment_expression  { $$.reset(new TodoExpression); }
 	;
 
 constant_expression
-	: conditional_expression
+	: conditional_expression    { $$ = $1; }
 	;
 
 declaration
@@ -247,7 +256,7 @@ type_specifier
 	| UNSIGNED                  { $$.set(TypeSpecifier::UNSIGNED); }
 	| struct_or_union_specifier { $$.set(TypeSpecifier::STRUCT_OR_UNION); }
 	| enum_specifier            { $$.set(TypeSpecifier::ENUM); }
-	| TYPE_NAME                 { $$.set(TypeSpecifier::TYPENAME, std::move($1)); }
+	| TYPE_NAME                 { $$.set(TypeSpecifier::TYPENAME, $1); }
 	;
 
 struct_or_union_specifier
@@ -310,30 +319,30 @@ type_qualifier
 	;
 
 declarator
-	: pointer direct_declarator
-	| direct_declarator
+	: pointer direct_declarator { $$ = $1; $$->setBase($2); }
+	| direct_declarator         { $$ = $1; }
 	;
 
 direct_declarator
-	: IDENTIFIER
-	| '(' declarator ')'
-	| direct_declarator '[' constant_expression ']'
-	| direct_declarator '[' ']'
+	: IDENTIFIER                                    { $$.reset(new IdentifierDeclarator($1)); }
+	| '(' declarator ')'                            { $$ = $2; }
+	| direct_declarator '[' constant_expression ']' { BEG $$.reset(new ArrayDeclarator($3)); $$->setBase($1); END }
+	| direct_declarator '[' ']'                     { $$.reset(new ArrayDeclarator); $$->setBase($1); }
 	| direct_declarator '(' parameter_type_list ')'
 	| direct_declarator '(' identifier_list ')'
 	| direct_declarator '(' ')'
 	;
 
 pointer
-	: '*'
-	| '*' type_qualifier_list
-	| '*' pointer
-	| '*' type_qualifier_list pointer
+	: '*'                               { $$.reset(new PointerDeclarator); }
+	| '*' type_qualifier_list           { $$.reset(new PointerDeclarator($2)); }
+	| '*' pointer                       { $$.reset(new PointerDeclarator); $$->setBase($2); }
+	| '*' type_qualifier_list pointer   { $$.reset(new PointerDeclarator($2)); $$->setBase($3); }
 	;
 
 type_qualifier_list
-	: type_qualifier
-	| type_qualifier_list type_qualifier
+	: type_qualifier                        { BEG $$.add($1);          END}
+	| type_qualifier_list type_qualifier    { BEG $$ = $1; $$.add($2); END }
 	;
 
 
