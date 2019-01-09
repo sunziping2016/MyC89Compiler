@@ -5,12 +5,10 @@
 #include "declaration.h"
 #include "expression.h"
 
-using namespace std;
-
 void c89c::DeclarationSpecifiers::add(StorageClassSpecifier &&specifier) {
-    if (m_storage_class == StorageClassSpecifier::NOT_SPECIFIED)
-        m_storage_class = specifier.m_flag;
-    else if (m_storage_class == specifier.m_flag)
+    if (m_storage == StorageClassSpecifier::NOT_SPECIFIED)
+        m_storage = specifier.m_flag;
+    else if (m_storage == specifier.m_flag)
         throw SemanticWarning("duplicated storage class specifier");
     else
         throw SemanticError("cannot combine with previous storage class specifier");
@@ -29,30 +27,30 @@ void c89c::DeclarationSpecifiers::add(TypeSpecifier &&specifier) {
             break;
         case TypeSpecifier::CHAR:
         case TypeSpecifier::INT:
-            if ((m_type_specifiers & ~bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG>(
+            if ((m_type_specifiers & ~std::bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG>(
                     1 << TypeSpecifier::SIGNED | 1 << TypeSpecifier::UNSIGNED)).any())
                 throw SemanticError("cannot combine with previous type specifier");
             break;
         case TypeSpecifier::SHORT:
-            if ((m_type_specifiers & ~bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG>(
+            if ((m_type_specifiers & ~std::bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG>(
                     1 << TypeSpecifier::SIGNED | 1 << TypeSpecifier::UNSIGNED |
                     1 << TypeSpecifier::INT)).any())
                 throw SemanticError("cannot combine with previous type specifier");
             break;
         case TypeSpecifier::LONG:
-            if ((m_type_specifiers & ~bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG>(
+            if ((m_type_specifiers & ~std::bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG>(
                     1 << TypeSpecifier::SIGNED | 1 << TypeSpecifier::UNSIGNED |
                     1 << TypeSpecifier::INT | 1 << TypeSpecifier::DOUBLE)).any())
                 throw SemanticError("cannot combine with previous type specifier");
             break;
         case TypeSpecifier::DOUBLE:
-            if ((m_type_specifiers & ~bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG>(
+            if ((m_type_specifiers & ~std::bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG>(
                     1 << TypeSpecifier::LONG)).any())
                 throw SemanticError("cannot combine with previous type specifier");
             break;
         case TypeSpecifier::SIGNED:
         case TypeSpecifier::UNSIGNED:
-            if ((m_type_specifiers & ~bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG>(
+            if ((m_type_specifiers & ~std::bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG>(
                     1 << TypeSpecifier::CHAR | 1 << TypeSpecifier::INT |
                     1 << TypeSpecifier::SHORT | 1 << TypeSpecifier::LONG)).any())
                 throw SemanticError("cannot combine with previous type specifier");
@@ -156,7 +154,7 @@ void c89c::PointerDeclarator::setBase(std::unique_ptr<Declarator> &&base) {
         m_base = std::move(base);
 }
 
-c89c::ArrayDeclarator::ArrayDeclarator(unique_ptr<c89c::Expression> &&expression): m_incomplete(false) {
+c89c::ArrayDeclarator::ArrayDeclarator(std::unique_ptr<c89c::Expression> &&expression): m_incomplete(false) {
     if (expression->isIntegerConstantExpression()) {
         llvm::APInt value = expression->getIntegerConstantValue();
         if (!expression->getType()->isUnsignedIntegerType() && value.isSignBitSet())
@@ -171,12 +169,23 @@ const std::string &c89c::ArrayDeclarator::identifier() const {
     return m_base->identifier();
 }
 
-unique_ptr<c89c::Type> c89c::ArrayDeclarator::getType(unique_ptr<c89c::Type> &&base_type) const {
+std::unique_ptr<c89c::Type> c89c::ArrayDeclarator::getType(std::unique_ptr<c89c::Type> &&base_type) const {
     std::unique_ptr<Type> type(new ArrayType(std::move(base_type), m_num, m_incomplete));
     return m_base->getType(std::move(type));
 }
 
-void c89c::ArrayDeclarator::setBase(unique_ptr<c89c::Declarator> &&base) {
+void c89c::ArrayDeclarator::setBase(std::unique_ptr<c89c::Declarator> &&base) {
     m_base = std::move(base);
 }
 
+void c89c::Declaration::generate(c89c::Driver &driver) {
+    for (auto &declarator: m_declarators) {
+        auto &&type = declarator->m_declarator->getType(std::unique_ptr<Type>(m_base_type->clone()));
+    }
+}
+
+llvm::Value *c89c::ExternValue::get(c89c::Driver &driver) {
+    if (m_value)
+        return m_value;
+    return nullptr;
+}

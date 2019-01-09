@@ -1,4 +1,4 @@
-%require "2.3"
+%require "3.2"
 %skeleton "lalr1.cc"
 
 %define parser_class_name {Parser}
@@ -58,9 +58,9 @@
 %type <c89c::StorageClassSpecifier> storage_class_specifier
 %type <c89c::TypeSpecifier> type_specifier
 %type <c89c::TypeQualifier> type_qualifier
-%type <c89c::DeclarationSpecifiers> declaration_specifiers
 %type <c89c::TypeQualifierList> type_qualifier_list
 
+%type <std::unique_ptr<c89c::DeclarationSpecifiers>> declaration_specifiers
 %type <std::unique_ptr<c89c::Declarator>> declarator direct_declarator pointer
 %type <std::unique_ptr<c89c::Expression>> primary_expression postfix_expression unary_expression
 %type <std::unique_ptr<c89c::Expression>> cast_expression multiplicative_expression additive_expression
@@ -68,6 +68,11 @@
 %type <std::unique_ptr<c89c::Expression>> and_expression exclusive_or_expression inclusive_or_expression
 %type <std::unique_ptr<c89c::Expression>> logical_and_expression logical_or_expression conditional_expression
 %type <std::unique_ptr<c89c::Expression>> assignment_expression expression constant_expression
+%type <std::unique_ptr<c89c::Initializer>> initializer
+%type <std::unique_ptr<c89c::InitializerList>> initializer_list
+%type <std::unique_ptr<c89c::InitDeclarator>> init_declarator
+%type <std::unique_ptr<c89c::InitDeclaratorList>> init_declarator_list
+%type <std::unique_ptr<c89c::Declaration>> declaration
 
 %nonassoc THEN
 %nonassoc ELSE
@@ -213,27 +218,27 @@ constant_expression
 	;
 
 declaration
-	: declaration_specifiers ';'
-	| declaration_specifiers init_declarator_list ';'
+	: declaration_specifiers ';'                        { $$.reset(new Declaration($1)); }
+	| declaration_specifiers init_declarator_list ';'   { $$.reset(new Declaration($1, $2)); }
 	;
 
 declaration_specifiers
-	: storage_class_specifier                           { BEG $$.add($1);          END }
-	| storage_class_specifier declaration_specifiers    { BEG $$ = $2; $$.add($1); END }
-	| type_specifier                                    { BEG $$.add($1);          END }
-	| type_specifier declaration_specifiers             { BEG $$ = $2; $$.add($1); END }
-	| type_qualifier                                    { BEG $$.add($1);          END }
-	| type_qualifier declaration_specifiers             { BEG $$ = $2; $$.add($1); END }
+	: storage_class_specifier                           { BEG $$->add($1);          END }
+	| storage_class_specifier declaration_specifiers    { BEG $$ = $2; $$->add($1); END }
+	| type_specifier                                    { BEG $$->add($1);          END }
+	| type_specifier declaration_specifiers             { BEG $$ = $2; $$->add($1); END }
+	| type_qualifier                                    { BEG $$->add($1);          END }
+	| type_qualifier declaration_specifiers             { BEG $$ = $2; $$->add($1); END }
 	;
 
 init_declarator_list
-	: init_declarator
-	| init_declarator_list ',' init_declarator
+	: init_declarator                           { $$.reset(new InitDeclaratorList); $$->add($1); }
+	| init_declarator_list ',' init_declarator  { $$ = $1; $$->add($3); }
 	;
 
 init_declarator
-	: declarator
-	| declarator '=' initializer
+	: declarator                    { $$.reset(new InitDeclarator($1)); }
+	| declarator '=' initializer    { $$.reset(new InitDeclarator($1, $3)); }
 	;
 
 storage_class_specifier
@@ -391,14 +396,14 @@ direct_abstract_declarator
 	;
 
 initializer
-	: assignment_expression
-	| '{' initializer_list '}'
-	| '{' initializer_list ',' '}'
+	: assignment_expression         { $$.reset(new ExpressionInitializer($1)); }
+	| '{' initializer_list '}'      { $$ = $2; }
+	| '{' initializer_list ',' '}'  { $$ = $2; }
 	;
 
 initializer_list
-	: initializer
-	| initializer_list ',' initializer
+	: initializer                       { $$.reset(new InitializerList); $$->add($1); }
+	| initializer_list ',' initializer  { $$ = $1; $$->add($3); }
 	;
 
 statement
@@ -466,7 +471,7 @@ translation_unit
 
 external_declaration
 	: function_definition
-	| declaration
+	| declaration           { BEG $1->generate(driver); END }
 	;
 
 function_definition

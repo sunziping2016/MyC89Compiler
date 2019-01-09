@@ -6,10 +6,14 @@
 #include <memory>
 #include <string>
 #include <cassert>
+#include <vector>
+
+#include <llvm/IR/Value.h>
 
 namespace c89c {
     class Type;
     class Expression;
+    class Driver;
 
     class TypeSpecifier {
         friend class DeclarationSpecifiers;
@@ -55,13 +59,12 @@ namespace c89c {
     };
 
     class DeclarationSpecifiers {
+        friend class Declaration;
     public:
         DeclarationSpecifiers():
-            m_storage_class(StorageClassSpecifier::NOT_SPECIFIED),
+            m_storage(StorageClassSpecifier::NOT_SPECIFIED),
             m_type_specifiers{0},
             m_const(false), m_volatile(false) {}
-        DeclarationSpecifiers(DeclarationSpecifiers &&other) = default;
-        DeclarationSpecifiers &operator = (DeclarationSpecifiers &&other) = default;
 
         void add(StorageClassSpecifier &&specifier);
         void add(TypeSpecifier &&specifier);
@@ -69,7 +72,7 @@ namespace c89c {
 
         std::unique_ptr<Type> getType() const;
     private:
-        StorageClassSpecifier::StorageClassSpecifierFlag m_storage_class;
+        StorageClassSpecifier::StorageClassSpecifierFlag m_storage;
         std::bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG> m_type_specifiers;
         bool m_const, m_volatile;
         std::unique_ptr<Type> m_type;
@@ -82,6 +85,27 @@ namespace c89c {
 
     private:
         bool m_const, m_volatile;
+    };
+
+    class Initializer {
+    public:
+        ~Initializer() = default;
+    };
+
+    class ExpressionInitializer: public Initializer {
+    public:
+        explicit ExpressionInitializer(std::unique_ptr<Expression> &&expr): m_expr(std::move(expr)) {}
+    private:
+        std::unique_ptr<Expression> m_expr;
+    };
+
+    class InitializerList: public Initializer {
+    public:
+        void add(std::unique_ptr<Initializer> &&initializer) {
+            m_initializers.push_back(std::move(initializer));
+        }
+    private:
+        std::vector<std::unique_ptr<Initializer>> m_initializers;
     };
 
     class Declarator {
@@ -107,6 +131,7 @@ namespace c89c {
 
     class IdentifierDeclarator: public Declarator {
     public:
+        // Empty identifier means an abstract declarator
         explicit IdentifierDeclarator(std::string identifier = ""): m_identifier(std::move(identifier)) {}
 
         const std::string &identifier() const override {
@@ -136,6 +161,64 @@ namespace c89c {
         std::unique_ptr<Declarator> m_base;
         uint64_t m_num;
         bool m_incomplete;
+    };
+
+    class InitDeclarator {
+        friend class Declaration;
+    public:
+        explicit InitDeclarator(std::unique_ptr<Declarator> &&declarator):
+            m_declarator(std::move(declarator)) {}
+        InitDeclarator(std::unique_ptr<Declarator> &&declarator, std::unique_ptr<Initializer> &&initializer):
+            m_declarator(std::move(declarator)), m_initializer(std::move(initializer)) {}
+
+    private:
+        std::unique_ptr<Declarator> m_declarator;
+        std::unique_ptr<Initializer> m_initializer;
+    };
+
+    class InitDeclaratorList {
+        friend class Declaration;
+    public:
+        void add(std::unique_ptr<InitDeclarator> &&declarator) {
+            m_declarators.push_back(std::move(declarator));
+        }
+    private:
+        std::vector<std::unique_ptr<InitDeclarator>> m_declarators;
+    };
+
+    class Declaration {
+    public:
+        explicit Declaration(std::unique_ptr<DeclarationSpecifiers> &&specifier)
+            : m_storage(specifier->m_storage), m_base_type(specifier->getType()) {}
+        Declaration(std::unique_ptr<DeclarationSpecifiers> &&specifier,
+                std::unique_ptr<InitDeclaratorList> &&declarators)
+            : m_storage(specifier->m_storage), m_base_type(specifier->getType()),
+            m_declarators(std::move(declarators->m_declarators)) {}
+
+        void generate(Driver &driver);
+    private:
+        StorageClassSpecifier::StorageClassSpecifierFlag m_storage;
+        std::unique_ptr<Type> m_base_type;
+        std::vector<std::unique_ptr<InitDeclarator>> m_declarators;
+    };
+
+    class Value {
+    public:
+        virtual bool isDefinition() const { return true; }
+
+        virtual llvm::Value *get(Driver &driver) = 0;
+
+    };
+
+    class ExternValue: public Value {
+    public:
+        ExternValue(): m_value(nullptr) {}
+        bool isDefinition() const override { return false; }
+
+        llvm::Value *get(Driver &driver) override;
+
+    private:
+        llvm::Value *m_value;
     };
 }
 

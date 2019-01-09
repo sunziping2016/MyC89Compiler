@@ -28,7 +28,11 @@ namespace c89c {
         virtual bool isSignedIntegerType() const { return false; }
         virtual bool isUnsignedIntegerType() const { return false; }
         virtual bool isIntegerType() const { return false; }
+        virtual bool isFloatingType() const { return false; }
 
+        bool isObjectType() const { return !isFunctionType(); }
+        virtual bool isFunctionType() const { return false; }
+        virtual bool isArrayType() const { return false; }
     private:
         bool m_const, m_volatile;
     };
@@ -70,7 +74,9 @@ namespace c89c {
         bool isIntegerType() const override {
             return m_type == CHAR || isSignedIntegerType() || isUnsignedIntegerType();
         }
-
+        bool isFloatingType() const override {
+            return m_type == FLOAT || m_type == DOUBLE || m_type == LONG_DOUBLE;
+        }
     private:
         TypeFlag m_type;
     };
@@ -79,11 +85,7 @@ namespace c89c {
     public:
         explicit PointerType(std::unique_ptr<Type> &&element): m_element(std::move(element)) {}
         PointerType(const PointerType &other): Type(other), m_element(other.m_element->clone()) {}
-        PointerType &operator = (const PointerType &other) {
-            Type::operator = (other);
-            m_element.reset(other.m_element->clone());
-            return *this;
-        }
+        PointerType &operator = (const PointerType &other);
 
         PointerType *clone() const override {
             return new PointerType(*this);
@@ -96,18 +98,14 @@ namespace c89c {
     };
 
     class ArrayType: public Type {
+        friend class FunctionType;
     public:
         explicit ArrayType(std::unique_ptr<Type> &&element, uint64_t num = 0, bool incomplete = false):
                 m_element(std::move(element)), m_num(num), m_incomplete(incomplete) {}
         ArrayType(const ArrayType &other):
             Type(other), m_element(other.m_element->clone()),
             m_num(other.m_num), m_incomplete(other.m_incomplete) {}
-        ArrayType &operator = (const ArrayType &other) {
-            Type::operator = (other);
-            m_element.reset(other.m_element->clone());
-            m_num = other.m_num;
-            return *this;
-        }
+        ArrayType &operator = (const ArrayType &other);
 
         ArrayType *clone() const override {
             return new ArrayType(*this);
@@ -116,10 +114,34 @@ namespace c89c {
             return llvm::ArrayType::get(m_element->generate(context), m_num);
         }
 
+        bool isArrayType() const override { return true; }
     private:
         std::unique_ptr<Type> m_element;
         uint64_t m_num;
         bool m_incomplete;
+    };
+
+    class FunctionType: public Type {
+        FunctionType(std::unique_ptr<Type> &&ret, std::vector<std::unique_ptr<Type>> &&args, bool var_arg):
+                m_return(std::move(ret)), m_args(std::move(args)), m_var_arg(var_arg) {}
+
+        FunctionType(const FunctionType &other):
+                Type(other), m_return(std::unique_ptr<Type>(other.m_return->clone())), m_var_arg(other.m_var_arg) {
+            for (const auto &arg: other.m_args)
+                m_args.emplace_back(arg->clone());
+        }
+        FunctionType &operator = (const FunctionType &other);
+
+        FunctionType *clone() const override {
+            return new FunctionType(*this);
+        }
+        llvm::Type *generate(llvm::LLVMContext &context) const override;
+
+        bool isFunctionType() const override { return true; }
+    private:
+        std::unique_ptr<Type> m_return;
+        std::vector<std::unique_ptr<Type>> m_args;
+        bool m_var_arg;
     };
 }
 
