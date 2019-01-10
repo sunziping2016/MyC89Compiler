@@ -40,20 +40,19 @@
                     }
 }
 
-%token <std::string> IDENTIFIER
-%token <std::unique_ptr<c89c::Expression>> CONSTANT
 %token STRING_LITERAL SIZEOF
 %token PTR_OP INC_OP DEC_OP LEFT_OP RIGHT_OP LE_OP GE_OP EQ_OP NE_OP
 %token AND_OP OR_OP MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN ADD_ASSIGN
 %token SUB_ASSIGN LEFT_ASSIGN RIGHT_ASSIGN AND_ASSIGN
 %token XOR_ASSIGN OR_ASSIGN
-%token <std::unique_ptr<c89c::Type>> TYPE_NAME
-
 %token TYPEDEF EXTERN STATIC AUTO REGISTER
 %token CHAR SHORT INT LONG SIGNED UNSIGNED FLOAT DOUBLE CONST VOLATILE VOID
 %token STRUCT UNION ENUM ELLIPSIS
-
 %token CASE DEFAULT IF ELSE SWITCH WHILE DO FOR GOTO CONTINUE BREAK RETURN
+
+%token <std::string> IDENTIFIER
+%token <std::unique_ptr<c89c::Expression>> CONSTANT
+%token <std::unique_ptr<c89c::Type>> TYPE_NAME
 
 %type <c89c::StorageClassSpecifier> storage_class_specifier
 %type <c89c::TypeSpecifier> type_specifier
@@ -223,12 +222,12 @@ declaration
 	;
 
 declaration_specifiers
-	: storage_class_specifier                           { BEG $$->add($1);          END }
-	| storage_class_specifier declaration_specifiers    { BEG $$ = $2; $$->add($1); END }
-	| type_specifier                                    { BEG $$->add($1);          END }
-	| type_specifier declaration_specifiers             { BEG $$ = $2; $$->add($1); END }
-	| type_qualifier                                    { BEG $$->add($1);          END }
-	| type_qualifier declaration_specifiers             { BEG $$ = $2; $$->add($1); END }
+	: storage_class_specifier                           { BEG $$.reset(new DeclarationSpecifiers); $$->add($1); END }
+	| storage_class_specifier declaration_specifiers    { BEG $$ = $2; $$->add($1);                             END }
+	| type_specifier                                    { BEG $$.reset(new DeclarationSpecifiers); $$->add($1); END }
+	| type_specifier declaration_specifiers             { BEG $$ = $2; $$->add($1);                             END }
+	| type_qualifier                                    { BEG $$.reset(new DeclarationSpecifiers); $$->add($1); END }
+	| type_qualifier declaration_specifiers             { BEG $$ = $2; $$->add($1);                             END }
 	;
 
 init_declarator_list
