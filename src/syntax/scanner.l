@@ -24,7 +24,7 @@ FS                      (f|F|l|L)
 IS                      (u|U|l|L)*
 
 %{
-#define NC column_number += yyleng
+#define NC m_column_number += yyleng
 %}
 
 %%
@@ -32,10 +32,10 @@ IS                      (u|U|l|L)*
     char c, prev = 0;
 	while ((c = yyinput()) != 0 && (c != '/' || prev != '*')) {
 	    if (c == '\n') {
-	        ++line_number;
-	        column_number = 1;
+	        ++m_line_number;
+	        m_column_number = 1;
 	    } else
-	        ++column_number;
+	        ++m_column_number;
 		prev = c;
 	}
 	if (c == 0)
@@ -47,20 +47,20 @@ IS                      (u|U|l|L)*
 "#"[ \t\f]+{D}+[ \t\f]+\"(\\.|[^\\"\n])*\"([ \t\f]+[1234])*	{
     NC;
     int begin = 1, end = yyleng;
-    line_number = 0;
-    column_number = 1;
+    m_line_number = 0;
+    m_column_number = 1;
     while (begin < end && isspace(yytext[begin])) ++begin;
     while (begin < end && isdigit(yytext[begin]))
-        line_number = line_number * 10 + (yytext[begin++] - '0');
-    --line_number;
-    filename.clear();
+        m_line_number = m_line_number * 10 + (yytext[begin++] - '0');
+    --m_line_number;
+    m_filename.clear();
     while (begin < end && yytext[begin] != '\"') ++begin;
     ++begin;
     while (begin < end && yytext[end] != '\"') --end;
     while (begin < end) {
         char ch;
         begin = parseEscape(yytext, begin, end, ch);
-        filename.push_back(ch);
+        m_filename.push_back(ch);
     }
 }
 
@@ -99,7 +99,15 @@ IS                      (u|U|l|L)*
 
 {L}({L}|{D})*           {
     NC;
-    value->emplace<std::string>(yytext);
+    std::string name(yytext);
+    if (m_driver.wantTypename()) {
+        auto item = m_driver.findInAllScope(name);
+        if (item != m_driver.allScopeEnd() && item->second.index() == 1) {
+            value->emplace<std::unique_ptr<c89c::Type>>(std::get<1>(item->second)->clone());
+            return token::TYPE_NAME;
+        }
+    }
+    value->emplace<std::string>(std::move(name));
     return token::IDENTIFIER;
 }
 
@@ -138,8 +146,8 @@ IS                      (u|U|l|L)*
         ap = llvm::APInt(32, v, true);
         type = BasicType::INT;
     }
-    value->emplace<std::unique_ptr<Expression>>(new IntegerConstant(
-        ap, std::unique_ptr<BasicType>(new BasicType(type))));
+    value->emplace<std::unique_ptr<Expression>>(std::make_unique<IntegerConstant>(
+        ap, std::unique_ptr<BasicType>(std::make_unique<BasicType>(type))));
     return token::CONSTANT;
 }
 
@@ -152,7 +160,7 @@ L?'(\\.|[^\\'])+'       {
         v = (v << 8) + static_cast<unsigned char>(ch);
     }
     v = (v << 8) + static_cast<unsigned char>(ch);
-    value->emplace<std::unique_ptr<Expression>>(new CharacterConstant(v));
+    value->emplace<std::unique_ptr<Expression>>(std::make_unique<CharacterConstant>(v));
     return token::CONSTANT;
 }
 
@@ -210,7 +218,7 @@ L?\"(\\.|[^\\"])*\"     NC; return token::STRING_LITERAL;
 "?"                     NC; return '?';
 
 [ \t\v\f]               NC;
-"\n"                    ++line_number; column_number = 1;
+"\n"                    ++m_line_number; m_column_number = 1;
 
 .                       {
     NC;

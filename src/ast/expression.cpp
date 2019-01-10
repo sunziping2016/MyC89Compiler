@@ -32,4 +32,4 @@ c89c::IntegerConstant::IntegerConstant(llvm::APInt value, std::unique_ptr<c89c::
 
 c89c::CharacterConstant::CharacterConstant(int value):
         IntegerConstant(llvm::APInt(32, static_cast<uint64_t>(value), true),
-        std::unique_ptr<Type>(new BasicType(BasicType::INT))) {}
+        std::unique_ptr<Type>(std::make_unique<BasicType>(BasicType::INT))) {}

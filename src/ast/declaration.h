@@ -59,10 +59,10 @@ namespace c89c {
     };
 
     class DeclarationSpecifiers {
-        friend class Declaration;
+        friend class InitDeclarator;
     public:
         DeclarationSpecifiers():
-            m_storage(StorageClassSpecifier::NOT_SPECIFIED),
+            m_storage_class(StorageClassSpecifier::NOT_SPECIFIED),
             m_type_specifiers{0},
             m_const(false), m_volatile(false) {}
 
@@ -72,7 +72,7 @@ namespace c89c {
 
         std::unique_ptr<Type> getType() const;
     private:
-        StorageClassSpecifier::StorageClassSpecifierFlag m_storage;
+        StorageClassSpecifier::StorageClassSpecifierFlag m_storage_class;
         std::bitset<TypeSpecifier::MAX_TYPE_SPECIFIER_FLAG> m_type_specifiers;
         bool m_const, m_volatile;
         std::unique_ptr<Type> m_type;
@@ -164,61 +164,23 @@ namespace c89c {
     };
 
     class InitDeclarator {
-        friend class Declaration;
     public:
         explicit InitDeclarator(std::unique_ptr<Declarator> &&declarator):
             m_declarator(std::move(declarator)) {}
         InitDeclarator(std::unique_ptr<Declarator> &&declarator, std::unique_ptr<Initializer> &&initializer):
             m_declarator(std::move(declarator)), m_initializer(std::move(initializer)) {}
 
+        void generate(const DeclarationSpecifiers &specifiers, Driver &driver);
     private:
         std::unique_ptr<Declarator> m_declarator;
         std::unique_ptr<Initializer> m_initializer;
     };
 
-    class InitDeclaratorList {
-        friend class Declaration;
-    public:
-        void add(std::unique_ptr<InitDeclarator> &&declarator) {
-            m_declarators.push_back(std::move(declarator));
-        }
-    private:
-        std::vector<std::unique_ptr<InitDeclarator>> m_declarators;
-    };
-
-    class Declaration {
-    public:
-        explicit Declaration(std::unique_ptr<DeclarationSpecifiers> &&specifier)
-            : m_storage(specifier->m_storage), m_base_type(specifier->getType()) {}
-        Declaration(std::unique_ptr<DeclarationSpecifiers> &&specifier,
-                std::unique_ptr<InitDeclaratorList> &&declarators)
-            : m_storage(specifier->m_storage), m_base_type(specifier->getType()),
-            m_declarators(std::move(declarators->m_declarators)) {}
-
-        void generate(Driver &driver);
-    private:
-        StorageClassSpecifier::StorageClassSpecifierFlag m_storage;
-        std::unique_ptr<Type> m_base_type;
-        std::vector<std::unique_ptr<InitDeclarator>> m_declarators;
-    };
-
     class Value {
     public:
-        virtual bool isDefinition() const { return true; }
-
-        virtual llvm::Value *get(Driver &driver) = 0;
-
-    };
-
-    class ExternValue: public Value {
-    public:
-        ExternValue(): m_value(nullptr) {}
-        bool isDefinition() const override { return false; }
-
-        llvm::Value *get(Driver &driver) override;
 
     private:
-        llvm::Value *m_value;
+        std::unique_ptr<Type> m_type;
     };
 }
 

@@ -1,3 +1,5 @@
+#include <memory>
+
 #include <iostream>
 #include <fstream>
 #include <memory>
@@ -18,7 +20,7 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[i], "-o") == 0) {
             if (++i < argc) {
                 std::error_code err;
-                output.reset(new llvm::raw_fd_ostream(argv[i], err, llvm::sys::fs::F_Text));
+                output = std::make_unique<llvm::raw_fd_ostream>(argv[i], err, llvm::sys::fs::F_Text);
                 if (err) {
                     std::cerr << "c89c: cannot open output file." << std::endl;
                     return 1;
@@ -29,7 +31,7 @@ int main(int argc, char *argv[]) {
             }
         } else {
             if (!input) {
-                input.reset(new std::ifstream(argv[i]));
+                input = std::make_unique<std::ifstream>(argv[i]);
                 if (!*input) {
                     std::cerr << "c89c: cannot open input file." << std::endl;
                     return 1;
@@ -42,7 +44,7 @@ int main(int argc, char *argv[]) {
         }
     }
     c89c::Driver driver(input_filename);
-    c89c::Scanner scanner(input.get(), input_filename);
+    c89c::Scanner scanner(input.get(), input_filename, driver);
     c89c::Parser parser(scanner, driver);
     if (!parser.parse()) {
         if (output)

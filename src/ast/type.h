@@ -33,6 +33,12 @@ namespace c89c {
         bool isObjectType() const { return !isFunctionType(); }
         virtual bool isFunctionType() const { return false; }
         virtual bool isArrayType() const { return false; }
+
+        virtual bool equal(const Type &other) const {
+            return m_const == other.m_const
+                   && m_volatile == other.m_volatile
+                   && typeid(*this) == typeid(other);
+        }
     private:
         bool m_const, m_volatile;
     };
@@ -77,6 +83,14 @@ namespace c89c {
         bool isFloatingType() const override {
             return m_type == FLOAT || m_type == DOUBLE || m_type == LONG_DOUBLE;
         }
+
+        bool equal(const Type &other) const override {
+            if (Type::equal(other)) {
+                const auto &other_ref = static_cast<const BasicType &>(other); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+                return m_type == other_ref.m_type;
+            }
+            return false;
+        }
     private:
         TypeFlag m_type;
     };
@@ -115,6 +129,14 @@ namespace c89c {
         }
 
         bool isArrayType() const override { return true; }
+
+        bool equal(const Type &other) const override {
+            if (Type::equal(other)) {
+                const auto &other_ref = static_cast<const ArrayType &>(other); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+                return m_num == other_ref.m_num && m_element->equal(*other_ref.m_element);
+            }
+            return false;
+        }
     private:
         std::unique_ptr<Type> m_element;
         uint64_t m_num;
@@ -138,6 +160,21 @@ namespace c89c {
         llvm::Type *generate(llvm::LLVMContext &context) const override;
 
         bool isFunctionType() const override { return true; }
+
+        bool equal(const Type &other) const override {
+            if (Type::equal(other)) {
+                const auto &other_ref = static_cast<const FunctionType &>(other); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+                if (m_var_arg != other_ref.m_var_arg ||
+                        m_args.size() != other_ref.m_args.size() ||
+                        !m_return->equal(*other_ref.m_return))
+                    return false;
+                for (decltype(m_args.size()) i = 0; i < m_args.size(); ++i)
+                    if (!m_args[i]->equal(*other_ref.m_args[i]))
+                        return false;
+                return true;
+            }
+            return false;
+        }
     private:
         std::unique_ptr<Type> m_return;
         std::vector<std::unique_ptr<Type>> m_args;

@@ -38,6 +38,8 @@
                     } catch (SemanticWarning &warn) {                                   \
                         std::cerr << scanner.position() << ": " << warn << std::endl;   \
                     }
+
+    typedef std::unique_ptr<c89c::DeclarationSpecifiers> DeclarationSpecifiersPtrType;
 }
 
 %token STRING_LITERAL SIZEOF
@@ -70,8 +72,6 @@
 %type <std::unique_ptr<c89c::Initializer>> initializer
 %type <std::unique_ptr<c89c::InitializerList>> initializer_list
 %type <std::unique_ptr<c89c::InitDeclarator>> init_declarator
-%type <std::unique_ptr<c89c::InitDeclaratorList>> init_declarator_list
-%type <std::unique_ptr<c89c::Declaration>> declaration
 
 %nonassoc THEN
 %nonassoc ELSE
@@ -80,21 +80,21 @@
 %%
 
 primary_expression
-	: IDENTIFIER            { $$.reset(new TodoExpression); }
+	: IDENTIFIER            { $$ = std::make_unique<TodoExpression>(); }
 	| CONSTANT              { $$ = $1; }
-	| STRING_LITERAL        { $$.reset(new TodoExpression); }
+	| STRING_LITERAL        { $$ = std::make_unique<TodoExpression>(); }
 	| '(' expression ')'    { $$ = $2; }
 	;
 
 postfix_expression
 	: primary_expression                                    { $$ = $1; }
-	| postfix_expression '[' expression ']'                 { $$.reset(new TodoExpression); }
-	| postfix_expression '(' ')'                            { $$.reset(new TodoExpression); }
-	| postfix_expression '(' argument_expression_list ')'   { $$.reset(new TodoExpression); }
-	| postfix_expression '.' IDENTIFIER                     { $$.reset(new TodoExpression); }
-	| postfix_expression PTR_OP IDENTIFIER                  { $$.reset(new TodoExpression); }
-	| postfix_expression INC_OP                             { $$.reset(new TodoExpression); }
-	| postfix_expression DEC_OP                             { $$.reset(new TodoExpression); }
+	| postfix_expression '[' expression ']'                 { $$ = std::make_unique<TodoExpression>(); }
+	| postfix_expression '(' ')'                            { $$ = std::make_unique<TodoExpression>(); }
+	| postfix_expression '(' argument_expression_list ')'   { $$ = std::make_unique<TodoExpression>(); }
+	| postfix_expression '.' IDENTIFIER                     { $$ = std::make_unique<TodoExpression>(); }
+	| postfix_expression PTR_OP IDENTIFIER                  { $$ = std::make_unique<TodoExpression>(); }
+	| postfix_expression INC_OP                             { $$ = std::make_unique<TodoExpression>(); }
+	| postfix_expression DEC_OP                             { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 argument_expression_list
@@ -104,11 +104,11 @@ argument_expression_list
 
 unary_expression
 	: postfix_expression                { $$ = $1; }
-	| INC_OP unary_expression           { $$.reset(new TodoExpression); }
-	| DEC_OP unary_expression           { $$.reset(new TodoExpression); }
-	| unary_operator cast_expression    { $$.reset(new TodoExpression); }
-	| SIZEOF unary_expression           { $$.reset(new TodoExpression); }
-	| SIZEOF '(' type_name ')'          { $$.reset(new TodoExpression); }
+	| INC_OP unary_expression           { $$ = std::make_unique<TodoExpression>(); }
+	| DEC_OP unary_expression           { $$ = std::make_unique<TodoExpression>(); }
+	| unary_operator cast_expression    { $$ = std::make_unique<TodoExpression>(); }
+	| SIZEOF unary_expression           { $$ = std::make_unique<TodoExpression>(); }
+	| SIZEOF '(' type_name ')'          { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 unary_operator
@@ -122,75 +122,75 @@ unary_operator
 
 cast_expression
 	: unary_expression                  { $$ = $1; }
-	| '(' type_name ')' cast_expression { $$.reset(new TodoExpression); }
+	| '(' type_name ')' cast_expression { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 multiplicative_expression
 	: cast_expression                               { $$ = $1; }
-	| multiplicative_expression '*' cast_expression { $$.reset(new TodoExpression); }
-	| multiplicative_expression '/' cast_expression { $$.reset(new TodoExpression); }
-	| multiplicative_expression '%' cast_expression { $$.reset(new TodoExpression); }
+	| multiplicative_expression '*' cast_expression { $$ = std::make_unique<TodoExpression>(); }
+	| multiplicative_expression '/' cast_expression { $$ = std::make_unique<TodoExpression>(); }
+	| multiplicative_expression '%' cast_expression { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 additive_expression
 	: multiplicative_expression                         { $$ = $1; }
-	| additive_expression '+' multiplicative_expression { $$.reset(new TodoExpression); }
-	| additive_expression '-' multiplicative_expression { $$.reset(new TodoExpression); }
+	| additive_expression '+' multiplicative_expression { $$ = std::make_unique<TodoExpression>(); }
+	| additive_expression '-' multiplicative_expression { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 shift_expression
 	: additive_expression                           { $$ = $1; }
-	| shift_expression LEFT_OP additive_expression  { $$.reset(new TodoExpression); }
-	| shift_expression RIGHT_OP additive_expression { $$.reset(new TodoExpression); }
+	| shift_expression LEFT_OP additive_expression  { $$ = std::make_unique<TodoExpression>(); }
+	| shift_expression RIGHT_OP additive_expression { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 relational_expression
 	: shift_expression
 	| relational_expression '<' shift_expression    { $$ = $1; }
-	| relational_expression '>' shift_expression    { $$.reset(new TodoExpression); }
-	| relational_expression LE_OP shift_expression  { $$.reset(new TodoExpression); }
-	| relational_expression GE_OP shift_expression  { $$.reset(new TodoExpression); }
+	| relational_expression '>' shift_expression    { $$ = std::make_unique<TodoExpression>(); }
+	| relational_expression LE_OP shift_expression  { $$ = std::make_unique<TodoExpression>(); }
+	| relational_expression GE_OP shift_expression  { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 equality_expression
 	: relational_expression                             { $$ = $1; }
-	| equality_expression EQ_OP relational_expression   { $$.reset(new TodoExpression); }
-	| equality_expression NE_OP relational_expression   { $$.reset(new TodoExpression); }
+	| equality_expression EQ_OP relational_expression   { $$ = std::make_unique<TodoExpression>(); }
+	| equality_expression NE_OP relational_expression   { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 and_expression
 	: equality_expression                       { $$ = $1; }
-	| and_expression '&' equality_expression    { $$.reset(new TodoExpression); }
+	| and_expression '&' equality_expression    { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 exclusive_or_expression
 	: and_expression                                { $$ = $1; }
-	| exclusive_or_expression '^' and_expression    { $$.reset(new TodoExpression); }
+	| exclusive_or_expression '^' and_expression    { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 inclusive_or_expression
 	: exclusive_or_expression                               { $$ = $1; }
-	| inclusive_or_expression '|' exclusive_or_expression   { $$.reset(new TodoExpression); }
+	| inclusive_or_expression '|' exclusive_or_expression   { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 logical_and_expression
 	: inclusive_or_expression                               { $$ = $1; }
-	| logical_and_expression AND_OP inclusive_or_expression { $$.reset(new TodoExpression); }
+	| logical_and_expression AND_OP inclusive_or_expression { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 logical_or_expression
 	: logical_and_expression                                { $$ = $1;  }
-	| logical_or_expression OR_OP logical_and_expression    { $$.reset(new TodoExpression); }
+	| logical_or_expression OR_OP logical_and_expression    { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 conditional_expression
 	: logical_or_expression                                             { $$ = $1; }
-	| logical_or_expression '?' expression ':' conditional_expression   { $$.reset(new TodoExpression); }
+	| logical_or_expression '?' expression ':' conditional_expression   { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 assignment_expression
 	: conditional_expression                                        { $$ = $1; }
-	| unary_expression assignment_operator assignment_expression    { $$.reset(new TodoExpression); }
+	| unary_expression assignment_operator assignment_expression    { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 assignment_operator
@@ -209,7 +209,7 @@ assignment_operator
 
 expression
 	: assignment_expression                 { $$ = $1; }
-	| expression ',' assignment_expression  { $$.reset(new TodoExpression); }
+	| expression ',' assignment_expression  { $$ = std::make_unique<TodoExpression>(); }
 	;
 
 constant_expression
@@ -217,27 +217,27 @@ constant_expression
 	;
 
 declaration
-	: declaration_specifiers ';'                        { $$.reset(new Declaration($1)); }
-	| declaration_specifiers init_declarator_list ';'   { $$.reset(new Declaration($1, $2)); }
+	: declaration_specifiers ';'
+	| declaration_specifiers init_declarator_list ';'
 	;
 
 declaration_specifiers
-	: storage_class_specifier                           { BEG $$.reset(new DeclarationSpecifiers); $$->add($1); END }
-	| storage_class_specifier declaration_specifiers    { BEG $$ = $2; $$->add($1);                             END }
-	| type_specifier                                    { BEG $$.reset(new DeclarationSpecifiers); $$->add($1); END }
-	| type_specifier declaration_specifiers             { BEG $$ = $2; $$->add($1);                             END }
-	| type_qualifier                                    { BEG $$.reset(new DeclarationSpecifiers); $$->add($1); END }
-	| type_qualifier declaration_specifiers             { BEG $$ = $2; $$->add($1);                             END }
+	: storage_class_specifier                           { BEG $$ = std::make_unique<DeclarationSpecifiers>(); $$->add($1); END }
+	| storage_class_specifier declaration_specifiers    { BEG $$ = $2; $$->add($1); END }
+	| type_specifier                                    { BEG $$ = std::make_unique<DeclarationSpecifiers>(); $$->add($1); END }
+	| type_specifier declaration_specifiers             { BEG $$ = $2; $$->add($1); END }
+	| type_qualifier                                    { BEG $$ = std::make_unique<DeclarationSpecifiers>(); $$->add($1); END }
+	| type_qualifier declaration_specifiers             { BEG $$ = $2; $$->add($1); END }
 	;
 
 init_declarator_list
-	: init_declarator                           { $$.reset(new InitDeclaratorList); $$->add($1); }
-	| init_declarator_list ',' init_declarator  { $$ = $1; $$->add($3); }
+	: init_declarator                           { BEG $1->generate(*$<DeclarationSpecifiersPtrType>0, driver); END }
+	| init_declarator_list ',' init_declarator  { BEG $3->generate(*$<DeclarationSpecifiersPtrType>0, driver); END }
 	;
 
 init_declarator
-	: declarator                    { $$.reset(new InitDeclarator($1)); }
-	| declarator '=' initializer    { $$.reset(new InitDeclarator($1, $3)); }
+	: declarator                    { $$ = std::make_unique<InitDeclarator>($1); }
+	| declarator '=' initializer    { $$ = std::make_unique<InitDeclarator>($1, $3); }
 	;
 
 storage_class_specifier
@@ -328,20 +328,20 @@ declarator
 	;
 
 direct_declarator
-	: IDENTIFIER                                    { $$.reset(new IdentifierDeclarator($1)); }
+	: IDENTIFIER                                    { $$ = std::make_unique<IdentifierDeclarator>($1); }
 	| '(' declarator ')'                            { $$ = $2; }
-	| direct_declarator '[' constant_expression ']' { BEG $$.reset(new ArrayDeclarator($3)); $$->setBase($1); END }
-	| direct_declarator '[' ']'                     { $$.reset(new ArrayDeclarator); $$->setBase($1); }
+	| direct_declarator '[' constant_expression ']' { BEG $$ = std::make_unique<ArrayDeclarator>($3); $$->setBase($1); END }
+	| direct_declarator '[' ']'                     { $$ = std::make_unique<ArrayDeclarator>(); $$->setBase($1); }
 	| direct_declarator '(' parameter_type_list ')'
 	| direct_declarator '(' identifier_list ')'
 	| direct_declarator '(' ')'
 	;
 
 pointer
-	: '*'                               { $$.reset(new PointerDeclarator); }
-	| '*' type_qualifier_list           { $$.reset(new PointerDeclarator($2)); }
-	| '*' pointer                       { $$.reset(new PointerDeclarator); $$->setBase($2); }
-	| '*' type_qualifier_list pointer   { $$.reset(new PointerDeclarator($2)); $$->setBase($3); }
+	: '*'                               { $$ = std::make_unique<PointerDeclarator>(); }
+	| '*' type_qualifier_list           { $$ = std::make_unique<PointerDeclarator>($2); }
+	| '*' pointer                       { $$ = std::make_unique<PointerDeclarator>(); $$->setBase($2); }
+	| '*' type_qualifier_list pointer   { $$ = std::make_unique<PointerDeclarator>($2); $$->setBase($3); }
 	;
 
 type_qualifier_list
@@ -395,13 +395,13 @@ direct_abstract_declarator
 	;
 
 initializer
-	: assignment_expression         { $$.reset(new ExpressionInitializer($1)); }
+	: assignment_expression         { $$ = std::make_unique<ExpressionInitializer>($1); }
 	| '{' initializer_list '}'      { $$ = $2; }
 	| '{' initializer_list ',' '}'  { $$ = $2; }
 	;
 
 initializer_list
-	: initializer                       { $$.reset(new InitializerList); $$->add($1); }
+	: initializer                       { $$ = std::make_unique<InitializerList>(); $$->add($1); }
 	| initializer_list ',' initializer  { $$ = $1; $$->add($3); }
 	;
 
@@ -443,7 +443,7 @@ expression_statement
 	;
 
 selection_statement
-	: IF '(' expression ')' statement                     %prec THEN
+	: IF '(' expression ')' statement %prec THEN
 	| IF '(' expression ')' statement ELSE statement
 	| SWITCH '(' expression ')' statement
 	;
@@ -470,7 +470,7 @@ translation_unit
 
 external_declaration
 	: function_definition
-	| declaration           { BEG $1->generate(driver); END }
+	| declaration
 	;
 
 function_definition

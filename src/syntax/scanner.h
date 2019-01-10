@@ -13,6 +13,7 @@
 #include <iostream>
 #include <string>
 
+#include "../ast/driver.h"
 #include "parser.hpp"
 
 namespace c89c {
@@ -29,23 +30,26 @@ namespace c89c {
 
     class Scanner: public c89cFlexLexer {
     public:
-        Scanner(std::istream *in, std::string filename) : c89cFlexLexer(in), filename(std::move(filename)) {}
+        Scanner(std::istream *in, std::string filename, Driver &driver):
+            c89cFlexLexer(in), m_filename(std::move(filename)), m_driver(driver) {}
 
         virtual int lex(Parser::semantic_type *value);
 
         Position position() {
-            return { filename, line_number, column_number };
+            return { m_filename, m_line_number, m_column_number };
         }
     protected:
         void error(const std::string &msg) {
-            std::cerr << position() << ": scanner error: " << msg << std::endl;
+            std::cerr << position() << ": lexical error: " << msg << std::endl;
         }
         int parseEscape(const char *str, int begin, int end, char &result);
 
 private:
-        std::string filename;
-        std::size_t line_number = 1;
-        std::size_t column_number = 1;
+        std::string m_filename;
+        std::size_t m_line_number = 1;
+        std::size_t m_column_number = 1;
+
+        Driver &m_driver;
     };
 }
 

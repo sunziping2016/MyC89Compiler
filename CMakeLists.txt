@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13)
 project(MyC89Compiler C CXX ASM)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
@@ -22,7 +22,8 @@ add_executable(c89c
         src/ast/declaration.cpp
         src/ast/error.h
         src/ast/error.cpp
-        src/ast/expression.h src/ast/expression.cpp)
+        src/ast/expression.h
+        src/ast/expression.cpp)
 
 find_package(LLVM REQUIRED CONFIG)
 

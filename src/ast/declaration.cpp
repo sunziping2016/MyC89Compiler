@@ -4,11 +4,12 @@
 #include "type.h"
 #include "declaration.h"
 #include "expression.h"
+#include "driver.h"
 
 void c89c::DeclarationSpecifiers::add(StorageClassSpecifier &&specifier) {
-    if (m_storage == StorageClassSpecifier::NOT_SPECIFIED)
-        m_storage = specifier.m_flag;
-    else if (m_storage == specifier.m_flag)
+    if (m_storage_class == StorageClassSpecifier::NOT_SPECIFIED)
+        m_storage_class = specifier.m_flag;
+    else if (m_storage_class == specifier.m_flag)
         throw SemanticWarning("duplicated storage class specifier");
     else
         throw SemanticError("cannot combine with previous storage class specifier");
@@ -86,36 +87,36 @@ void c89c::DeclarationSpecifiers::add(TypeQualifier &&qualifier) {
 std::unique_ptr<c89c::Type> c89c::DeclarationSpecifiers::getType() const {
     std::unique_ptr<Type> type;
     if (m_type)
-        type.reset(type->clone());
+        type.reset(m_type->clone());
     else if (m_type_specifiers[TypeSpecifier::UNSIGNED]) {
         if (m_type_specifiers[TypeSpecifier::CHAR])
-            type.reset(new BasicType(BasicType::UNSIGNED_CHAR));
+            type = std::make_unique<BasicType>(BasicType::UNSIGNED_CHAR);
         else if (m_type_specifiers[TypeSpecifier::SHORT])
-            type.reset(new BasicType(BasicType::UNSIGNED_SHORT));
+            type = std::make_unique<BasicType>(BasicType::UNSIGNED_SHORT);
         else if (m_type_specifiers[TypeSpecifier::LONG])
-            type.reset(new BasicType(BasicType::UNSIGNED_LONG));
+            type = std::make_unique<BasicType>(BasicType::UNSIGNED_LONG);
         else
-            type.reset(new BasicType(BasicType::UNSIGNED_INT));
+            type = std::make_unique<BasicType>(BasicType::UNSIGNED_INT);
     } else if (m_type_specifiers[TypeSpecifier::CHAR]) {
         if (m_type_specifiers[TypeSpecifier::SIGNED])
-            type.reset(new BasicType(BasicType::SIGNED_CHAR));
+            type = std::make_unique<BasicType>(BasicType::SIGNED_CHAR);
         else
-            type.reset(new BasicType(BasicType::CHAR));
+            type = std::make_unique<BasicType>(BasicType::CHAR);
     } else if (m_type_specifiers[TypeSpecifier::SHORT])
-        type.reset(new BasicType(BasicType::SHORT));
+        type = std::make_unique<BasicType>(BasicType::SHORT);
     else if (m_type_specifiers[TypeSpecifier::LONG])
-        type.reset(new BasicType(BasicType::LONG));
+        type = std::make_unique<BasicType>(BasicType::LONG);
     else if (m_type_specifiers[TypeSpecifier::FLOAT])
-        type.reset(new BasicType(BasicType::FLOAT));
+        type = std::make_unique<BasicType>(BasicType::FLOAT);
     else if (m_type_specifiers[TypeSpecifier::DOUBLE]) {
         if (m_type_specifiers[TypeSpecifier::LONG])
-            type.reset(new BasicType(BasicType::LONG_DOUBLE));
+            type = std::make_unique<BasicType>(BasicType::LONG_DOUBLE);
         else
-            type.reset(new BasicType(BasicType::DOUBLE));
+            type = std::make_unique<BasicType>(BasicType::DOUBLE);
     } else if (m_type_specifiers[TypeSpecifier::VOID])
-        type.reset(new VoidType);
+        type = std::make_unique<VoidType>();
     else
-        type.reset(new BasicType(BasicType::INT));
+        type = std::make_unique<BasicType>(BasicType::INT);
     type->setConst(m_const);
     type->setVolatile(m_volatile);
     return type;
@@ -141,7 +142,7 @@ const std::string &c89c::PointerDeclarator::identifier() const {
 
 std::unique_ptr<c89c::Type> c89c::PointerDeclarator::getType(std::unique_ptr<Type> &&base_type) const {
     assert(m_base);
-    std::unique_ptr<Type> type(new PointerType(std::move(base_type)));
+    std::unique_ptr<Type> type = std::make_unique<PointerType>(std::move(base_type));
     type->setConst(m_const);
     type->setVolatile(m_volatile);
     return m_base->getType(std::move(type));
@@ -170,7 +171,7 @@ const std::string &c89c::ArrayDeclarator::identifier() const {
 }
 
 std::unique_ptr<c89c::Type> c89c::ArrayDeclarator::getType(std::unique_ptr<c89c::Type> &&base_type) const {
-    std::unique_ptr<Type> type(new ArrayType(std::move(base_type), m_num, m_incomplete));
+    std::unique_ptr<Type> type = std::make_unique<ArrayType>(std::move(base_type), m_num, m_incomplete);
     return m_base->getType(std::move(type));
 }
 
@@ -178,14 +179,22 @@ void c89c::ArrayDeclarator::setBase(std::unique_ptr<c89c::Declarator> &&base) {
     m_base = std::move(base);
 }
 
-void c89c::Declaration::generate(c89c::Driver &driver) {
-    for (auto &declarator: m_declarators) {
-        auto &&type = declarator->m_declarator->getType(std::unique_ptr<Type>(m_base_type->clone()));
+void c89c::InitDeclarator::generate(const c89c::DeclarationSpecifiers &specifiers, c89c::Driver &driver) {
+    // TODO: when inside the declaration list inside function definition
+    auto &&type = m_declarator->getType(specifiers.getType());
+    if(specifiers.m_storage_class == StorageClassSpecifier::TYPEDEF) {
+        if (m_initializer)
+            throw SemanticError("illegal initializer for typedef");
+        auto iter = driver.topScope().find(m_declarator->identifier());
+        if (iter == driver.topScope().end()) {
+            driver.topScope().emplace(m_declarator->identifier(), std::move(type));
+        } else {
+            if (iter->second.index() == 1) {
+                const auto &other_type = std::get<1>(iter->second);
+                if (!type->equal(*other_type))
+                    throw SemanticError("typedef redefinition with different types");
+            } else
+                throw SemanticError("redefinition of \'" + m_declarator->identifier() + "\'");
+        }
     }
-}
-
-llvm::Value *c89c::ExternValue::get(c89c::Driver &driver) {
-    if (m_value)
-        return m_value;
-    return nullptr;
 }
