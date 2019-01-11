@@ -57,3 +57,18 @@ llvm::Type *c89c::FunctionType::generate(llvm::LLVMContext &context) const {
         args.push_back(arg->generate(context));
     return llvm::FunctionType::get(m_return->generate(context), args, m_var_arg);
 }
+
+bool c89c::FunctionType::equal(const c89c::Type &other) const {
+    if (Type::equal(other)) {
+        const auto &other_ref = static_cast<const FunctionType &>(other); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+        if (m_var_arg != other_ref.m_var_arg ||
+            m_args.size() != other_ref.m_args.size() ||
+            !m_return->equal(*other_ref.m_return))
+            return false;
+        for (decltype(m_args.size()) i = 0; i < m_args.size(); ++i)
+            if (!m_args[i]->equal(*other_ref.m_args[i]))
+                return false;
+        return true;
+    }
+    return false;
+}

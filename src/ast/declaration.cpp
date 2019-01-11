@@ -179,15 +179,65 @@ void c89c::ArrayDeclarator::setBase(std::unique_ptr<c89c::Declarator> &&base) {
     m_base = std::move(base);
 }
 
+c89c::ParameterDeclaration::ParameterDeclaration(std::unique_ptr<c89c::DeclarationSpecifiers> &&specifiers,
+                                                 std::unique_ptr<c89c::Declarator> &&declarator) {
+    if (specifiers->m_storage_class == StorageClassSpecifier::REGISTER)
+        m_register = true;
+    else if (specifiers->m_storage_class == StorageClassSpecifier::NOT_SPECIFIED)
+        m_register = false;
+    else
+        throw SemanticError("invalid storage class specifier in function declarator");
+    if (declarator) {
+        m_type = declarator->getType(specifiers->getType());
+        m_identifier = declarator->identifier();
+    } else
+        m_type = specifiers->getType();
+    if (auto array_type = dynamic_cast<ArrayType *>(m_type.get()))
+        m_type.reset(array_type->toPointerType());
+    else if (auto function_type = dynamic_cast<FunctionType *>(m_type.get()))
+        m_type.reset(function_type->toPointerType());
+    if (m_type->isVoidType() && !m_identifier.empty())
+        throw SemanticError("argument may not have \'void\' type");
+}
+
+void c89c::ParameterList::add(std::unique_ptr<c89c::ParameterDeclaration> &&parameter) {
+    if (!m_parameters.empty() && parameter->m_type->isVoidType())
+        throw SemanticError("argument may not have \'void\' type");
+    m_parameters.push_back(std::move(parameter));
+}
+
+c89c::FunctionDeclarator::FunctionDeclarator(std::unique_ptr<c89c::ParameterList> &&parameters):
+        m_var_args(parameters->isVarArgs()) {
+    if (!parameters->isVoid())
+        m_parameters = std::move(parameters->m_parameters);
+}
+
+const std::string &c89c::FunctionDeclarator::identifier() const {
+    assert(m_base);
+    return m_base->identifier();
+}
+
+std::unique_ptr<c89c::Type> c89c::FunctionDeclarator::getType(std::unique_ptr<c89c::Type> &&base_type) const {
+    std::vector<std::unique_ptr<Type>> args;
+    for (const auto &param: m_parameters)
+        args.push_back(std::unique_ptr<Type>(param->m_type->clone()));
+    std::unique_ptr<Type> type = std::make_unique<FunctionType>(std::move(base_type), std::move(args), m_var_args);
+    return m_base->getType(std::move(type));
+}
+
+void c89c::FunctionDeclarator::setBase(std::unique_ptr<c89c::Declarator> &&base) {
+    m_base = std::move(base);
+}
+
 void c89c::InitDeclarator::generate(const c89c::DeclarationSpecifiers &specifiers, c89c::Driver &driver) {
     // TODO: when inside the declaration list inside function definition
     auto &&type = m_declarator->getType(specifiers.getType());
-    if(specifiers.m_storage_class == StorageClassSpecifier::TYPEDEF) {
+    if (specifiers.m_storage_class == StorageClassSpecifier::TYPEDEF) {
         if (m_initializer)
             throw SemanticError("illegal initializer for typedef");
-        auto iter = driver.topScope().find(m_declarator->identifier());
-        if (iter == driver.topScope().end()) {
-            driver.topScope().emplace(m_declarator->identifier(), std::move(type));
+        auto iter = driver.topScope().names.find(m_declarator->identifier());
+        if (iter == driver.topScope().names.end()) {
+            driver.topScope().names.emplace(m_declarator->identifier(), std::move(type));
         } else {
             if (iter->second.index() == 1) {
                 const auto &other_type = std::get<1>(iter->second);
@@ -195,6 +245,20 @@ void c89c::InitDeclarator::generate(const c89c::DeclarationSpecifiers &specifier
                     throw SemanticError("typedef redefinition with different types");
             } else
                 throw SemanticError("redefinition of \'" + m_declarator->identifier() + "\'");
+        }
+    } else if (driver.isGlobal()) {
+        if (auto function_type = dynamic_cast<FunctionType *>(type.get())) {
+            // Function
+            if (specifiers.m_storage_class == StorageClassSpecifier::AUTO ||
+                specifiers.m_storage_class == StorageClassSpecifier::REGISTER)
+                throw SemanticError("illegal storage class on function");
+            if (m_initializer)
+                throw SemanticError("illegal initializer (only variables can be initialized)");
+            const auto &return_type = function_type->returnType();
+            if (return_type->isArrayType())
+                throw SemanticError("function cannot return array type");
+            if (return_type->isIncompleteType() && !return_type->isVoidType())
+                throw SemanticError("incomplete result type in function definition");
         }
     }
 }

@@ -13,3 +13,13 @@ void c89c::Driver::output(llvm::raw_ostream &out) {
     pm.addPass(llvm::PrintModulePass(out));
     pm.run(m_module, am);
 }
+
+std::unordered_map<std::string, c89c::Item>::iterator c89c::Driver::findInAllScope(const std::string &name) {
+    std::unordered_map<std::string, Item>::iterator item;
+    for (auto scope = m_scopes.rbegin(); scope != m_scopes.rend(); ++scope) {
+        item = scope->names.find(name);
+        if (item != scope->names.end())
+            return item;
+    }
+    return item;
+}

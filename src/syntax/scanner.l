@@ -100,7 +100,7 @@ IS                      (u|U|l|L)*
 {L}({L}|{D})*           {
     NC;
     std::string name(yytext);
-    if (m_driver.wantTypename()) {
+    if (!m_driver.wantIdentifier()) {
         auto item = m_driver.findInAllScope(name);
         if (item != m_driver.allScopeEnd() && item->second.index() == 1) {
             value->emplace<std::unique_ptr<c89c::Type>>(std::get<1>(item->second)->clone());

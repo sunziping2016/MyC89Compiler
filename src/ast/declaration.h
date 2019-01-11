@@ -60,6 +60,7 @@ namespace c89c {
 
     class DeclarationSpecifiers {
         friend class InitDeclarator;
+        friend class ParameterDeclaration;
     public:
         DeclarationSpecifiers():
             m_storage_class(StorageClassSpecifier::NOT_SPECIFIED),
@@ -149,6 +150,8 @@ namespace c89c {
         std::string m_identifier;
     };
 
+    class AbstractDeclarator: public IdentifierDeclarator {};
+
     class ArrayDeclarator: public Declarator {
     public:
         ArrayDeclarator(): m_num(0), m_incomplete(true) {}
@@ -161,6 +164,49 @@ namespace c89c {
         std::unique_ptr<Declarator> m_base;
         uint64_t m_num;
         bool m_incomplete;
+    };
+
+    class ParameterDeclaration {
+        friend class ParameterList;
+        friend class FunctionDeclarator;
+    public:
+        explicit ParameterDeclaration(std::unique_ptr<DeclarationSpecifiers> &&specifiers, std::unique_ptr<Declarator> &&declarator = nullptr);
+    private:
+        bool m_register;
+        std::unique_ptr<Type> m_type;
+        std::string m_identifier;
+    };
+
+    class ParameterList {
+        friend class FunctionDeclarator;
+    public:
+        void setVarArgs(bool var_args) {
+            m_var_args = var_args;
+        }
+        bool isVarArgs() {
+            return m_parameters.empty() || m_var_args;
+        }
+        bool isVoid() {
+            return m_parameters.size() == 1 && m_parameters.front()->m_type->isVoidType();
+        }
+        void add(std::unique_ptr<c89c::ParameterDeclaration> &&parameter);
+    private:
+        std::vector<std::unique_ptr<ParameterDeclaration>> m_parameters;
+        bool m_var_args;
+    };
+
+    class FunctionDeclarator: public Declarator {
+    public:
+        FunctionDeclarator(): m_var_args(true) {}
+        explicit FunctionDeclarator(std::unique_ptr<ParameterList> &&parameters);
+
+        const std::string &identifier() const override;
+        std::unique_ptr<Type> getType(std::unique_ptr<Type> &&base_type) const override;
+        void setBase(std::unique_ptr<Declarator> &&base) override;
+    private:
+        std::unique_ptr<Declarator> m_base;
+        std::vector<std::unique_ptr<ParameterDeclaration>> m_parameters;
+        bool m_var_args;
     };
 
     class InitDeclarator {
@@ -178,8 +224,8 @@ namespace c89c {
 
     class Value {
     public:
-
-    private:
+        virtual llvm::Value *get() = 0;
+    protected:
         std::unique_ptr<Type> m_type;
     };
 }

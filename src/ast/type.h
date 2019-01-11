@@ -25,6 +25,7 @@ namespace c89c {
         void setConst(bool c) { m_const = c; }
         void setVolatile(bool v) { m_volatile = v; }
 
+        virtual bool isVoidType() const { return false; }
         virtual bool isSignedIntegerType() const { return false; }
         virtual bool isUnsignedIntegerType() const { return false; }
         virtual bool isIntegerType() const { return false; }
@@ -34,11 +35,14 @@ namespace c89c {
         virtual bool isFunctionType() const { return false; }
         virtual bool isArrayType() const { return false; }
 
+        virtual bool isIncompleteType() const { return false; }
+
         virtual bool equal(const Type &other) const {
             return m_const == other.m_const
                    && m_volatile == other.m_volatile
                    && typeid(*this) == typeid(other);
         }
+
     private:
         bool m_const, m_volatile;
     };
@@ -51,6 +55,9 @@ namespace c89c {
         llvm::Type *generate(llvm::LLVMContext &context) const override {
             return llvm::Type::getVoidTy(context);
         }
+
+        bool isVoidType() const override { return true; }
+        bool isIncompleteType() const override { return true; }
     };
 
     class BasicType: public Type {
@@ -124,11 +131,15 @@ namespace c89c {
         ArrayType *clone() const override {
             return new ArrayType(*this);
         }
+        PointerType *toPointerType() const {
+            return new PointerType(std::unique_ptr<Type>(m_element->clone()));
+        }
         llvm::Type *generate(llvm::LLVMContext &context) const override {
             return llvm::ArrayType::get(m_element->generate(context), m_num);
         }
 
         bool isArrayType() const override { return true; }
+        bool isIncompleteType() const override { return m_incomplete; }
 
         bool equal(const Type &other) const override {
             if (Type::equal(other)) {
@@ -144,6 +155,7 @@ namespace c89c {
     };
 
     class FunctionType: public Type {
+    public:
         FunctionType(std::unique_ptr<Type> &&ret, std::vector<std::unique_ptr<Type>> &&args, bool var_arg):
                 m_return(std::move(ret)), m_args(std::move(args)), m_var_arg(var_arg) {}
 
@@ -157,23 +169,17 @@ namespace c89c {
         FunctionType *clone() const override {
             return new FunctionType(*this);
         }
+        PointerType *toPointerType() const {
+            return new PointerType(std::unique_ptr<Type>(clone()));
+        }
         llvm::Type *generate(llvm::LLVMContext &context) const override;
 
         bool isFunctionType() const override { return true; }
 
-        bool equal(const Type &other) const override {
-            if (Type::equal(other)) {
-                const auto &other_ref = static_cast<const FunctionType &>(other); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-                if (m_var_arg != other_ref.m_var_arg ||
-                        m_args.size() != other_ref.m_args.size() ||
-                        !m_return->equal(*other_ref.m_return))
-                    return false;
-                for (decltype(m_args.size()) i = 0; i < m_args.size(); ++i)
-                    if (!m_args[i]->equal(*other_ref.m_args[i]))
-                        return false;
-                return true;
-            }
-            return false;
+        bool equal(const Type &other) const override;
+
+        std::unique_ptr<Type> &returnType() {
+            return m_return;
         }
     private:
         std::unique_ptr<Type> m_return;
