@@ -193,9 +193,9 @@ c89c::ParameterDeclaration::ParameterDeclaration(std::unique_ptr<c89c::Declarati
     } else
         m_type = specifiers->getType();
     if (auto array_type = dynamic_cast<ArrayType *>(m_type.get()))
-        m_type.reset(array_type->toPointerType());
+        m_type.reset(array_type->decay());
     else if (auto function_type = dynamic_cast<FunctionType *>(m_type.get()))
-        m_type.reset(function_type->toPointerType());
+        m_type.reset(function_type->decay());
     if (m_type->isVoidType() && !m_identifier.empty())
         throw SemanticError("argument may not have \'void\' type");
 }
@@ -221,9 +221,11 @@ std::unique_ptr<c89c::Type> c89c::FunctionDeclarator::getType(std::unique_ptr<c8
     std::vector<std::unique_ptr<Type>> args;
     for (const auto &param: m_parameters)
         args.push_back(std::unique_ptr<Type>(param->m_type->clone()));
-    std::unique_ptr<Type> type = std::make_unique<FunctionType>(std::move(base_type), std::move(args), m_var_args);
+    std::unique_ptr<Type> type = std::make_unique<FunctionType>(std::move(base_type), std::move(args),
+            m_var_args, args.empty() && m_var_args);
     return m_base->getType(std::move(type));
 }
+static int a();
 
 void c89c::FunctionDeclarator::setBase(std::unique_ptr<c89c::Declarator> &&base) {
     m_base = std::move(base);
@@ -233,6 +235,7 @@ void c89c::InitDeclarator::generate(const c89c::DeclarationSpecifiers &specifier
     // TODO: when inside the declaration list inside function definition
     auto &&type = m_declarator->getType(specifiers.getType());
     if (specifiers.m_storage_class == StorageClassSpecifier::TYPEDEF) {
+        // Typedef
         if (m_initializer)
             throw SemanticError("illegal initializer for typedef");
         auto iter = driver.topScope().names.find(m_declarator->identifier());
@@ -244,21 +247,64 @@ void c89c::InitDeclarator::generate(const c89c::DeclarationSpecifiers &specifier
                 if (!type->equal(*other_type))
                     throw SemanticError("typedef redefinition with different types");
             } else
-                throw SemanticError("redefinition of \'" + m_declarator->identifier() + "\'");
+                throw SemanticError("redefinition of \'" + m_declarator->identifier() + "\' as different kind of symbol");
         }
-    } else if (driver.isGlobal()) {
-        if (auto function_type = dynamic_cast<FunctionType *>(type.get())) {
-            // Function
-            if (specifiers.m_storage_class == StorageClassSpecifier::AUTO ||
-                specifiers.m_storage_class == StorageClassSpecifier::REGISTER)
-                throw SemanticError("illegal storage class on function");
-            if (m_initializer)
-                throw SemanticError("illegal initializer (only variables can be initialized)");
-            const auto &return_type = function_type->returnType();
-            if (return_type->isArrayType())
-                throw SemanticError("function cannot return array type");
-            if (return_type->isIncompleteType() && !return_type->isVoidType())
-                throw SemanticError("incomplete result type in function definition");
+    } else if (auto function_type = dynamic_cast<FunctionType *>(type.get())) {
+        // Function
+        if (specifiers.m_storage_class == StorageClassSpecifier::AUTO ||
+            specifiers.m_storage_class == StorageClassSpecifier::REGISTER)
+            throw SemanticError("illegal storage class on function");
+        if (specifiers.m_storage_class == StorageClassSpecifier::STATIC && !driver.isGlobal())
+            throw SemanticError("function declared in block scope cannot have \'static\' storage class");
+        if (m_initializer)
+            throw SemanticError("illegal initializer (only variables can be initialized)");
+        const auto &return_type = function_type->returnType();
+        if (return_type->isArrayType())
+            throw SemanticError("function cannot return array type");
+        if (return_type->isFunctionType())
+            throw SemanticError("function cannot return function type");
+        if (return_type->isIncompleteType() && !return_type->isVoidType())
+            throw SemanticError("incomplete result type in function definition");
+        auto linkage = specifiers.m_storage_class == StorageClassSpecifier::STATIC ?
+                Driver::FunctionPrototypeItem::INTERNAL : Driver::FunctionPrototypeItem::EXTERNAL;
+        auto function_iter = driver.findInAllFunctions(m_declarator->identifier());
+        if (function_iter != driver.allFunctionsEnd()) {
+            if (!function_iter->second.type->compatible(*function_type))
+                throw SemanticError("conflicting types for \'" + m_declarator->identifier() + "\'");
+            if (function_iter->second.linkage == Driver::FunctionPrototypeItem::EXTERNAL &&
+                    linkage == Driver::FunctionPrototypeItem::INTERNAL)
+                throw SemanticError("static declaration of \'" + m_declarator->identifier() + "\' follows non-static declaration");
+            if (function_iter->second.linkage == Driver::FunctionPrototypeItem::INTERNAL)
+                linkage = Driver::FunctionPrototypeItem::INTERNAL;
+            if (function_iter->second.type->isOldStyle() && !function_iter->second.type->isOldStyleDefinition()) {
+                driver.addToAllFunctions(m_declarator->identifier(),
+                                         {linkage, std::unique_ptr<FunctionType>(function_type->clone())});
+            }
+        } else
+            driver.addToAllFunctions(m_declarator->identifier(),
+                    {linkage, std::unique_ptr<FunctionType>(function_type->clone())});
+        auto scope_iter = driver.topScope().names.find(m_declarator->identifier());
+        if (scope_iter == driver.topScope().names.end())
+            driver.topScope().names.emplace(m_declarator->identifier(), std::make_unique<FunctionValue>(
+                    m_declarator->identifier(), std::unique_ptr<Type>(function_type->clone()),
+                    specifiers.m_storage_class == StorageClassSpecifier::STATIC ? FunctionValue::INTERNAL :
+                    FunctionValue::EXTERNAL));
+        else {
+            if (scope_iter->second.index() == 0) {
+                const auto &value = std::get<0>(scope_iter->second);
+                if (!value->type()->isFunctionType())
+                    throw SemanticError("redefinition of \'" + m_declarator->identifier() + "\' as different kind of symbol");
+            } else
+                throw SemanticError("redefinition of \'" + m_declarator->identifier() + "\' as different kind of symbol");
         }
     }
+}
+
+llvm::Function *c89c::FunctionValue::get(Driver &driver) {
+    if (m_value)
+        return m_value;
+    m_value = llvm::Function::Create(static_cast<llvm::FunctionType *>(m_type->generate(driver.context())), // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+            m_linkage == EXTERNAL ? llvm::GlobalValue::ExternalLinkage : llvm::GlobalValue::InternalLinkage,
+            m_name, &driver.module());
+    return m_value;
 }

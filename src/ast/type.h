@@ -17,6 +17,15 @@ namespace c89c {
         virtual ~Type() = default;
 
         virtual Type *clone() const = 0;
+        virtual Type *decay() const {
+            Type *type = clone();
+            type->setConst(false);
+            type->setVolatile(false);
+            return type;
+        }
+        virtual Type *promote() const {
+            return clone();
+        }
         virtual llvm::Type *generate(llvm::LLVMContext &context) const = 0;
 
         bool isConst() const { return m_const; }
@@ -36,11 +45,11 @@ namespace c89c {
         virtual bool isArrayType() const { return false; }
 
         virtual bool isIncompleteType() const { return false; }
+        virtual bool affectedByPromotion() const { return false; }
 
-        virtual bool equal(const Type &other) const {
-            return m_const == other.m_const
-                   && m_volatile == other.m_volatile
-                   && typeid(*this) == typeid(other);
+        virtual bool equal(const Type &other) const;
+        virtual bool compatible(const Type &other) const {
+            return typeid(*this) == typeid(other);
         }
 
     private:
@@ -74,6 +83,18 @@ namespace c89c {
         BasicType *clone() const override {
             return new BasicType(*this);
         }
+        BasicType *promote() const override {
+            switch (m_type) {
+                case CHAR: case UNSIGNED_CHAR: case SIGNED_CHAR:
+                case SHORT: case UNSIGNED_SHORT:
+                    return new BasicType(INT);
+                case FLOAT:
+                    return new BasicType(DOUBLE);
+                default:
+                    return clone();
+            }
+        }
+
         llvm::Type *generate(llvm::LLVMContext &context) const override;
 
         bool isSignedIntegerType() const override {
@@ -91,13 +112,13 @@ namespace c89c {
             return m_type == FLOAT || m_type == DOUBLE || m_type == LONG_DOUBLE;
         }
 
-        bool equal(const Type &other) const override {
-            if (Type::equal(other)) {
-                const auto &other_ref = static_cast<const BasicType &>(other); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-                return m_type == other_ref.m_type;
-            }
-            return false;
+        bool affectedByPromotion() const override {
+            return m_type == CHAR || m_type == UNSIGNED_CHAR || m_type == SIGNED_CHAR ||
+                m_type == SHORT || m_type == UNSIGNED_SHORT || m_type == FLOAT;
         }
+
+        bool equal(const Type &other) const override;
+        bool compatible(const Type &other) const override;
     private:
         TypeFlag m_type;
     };
@@ -114,6 +135,15 @@ namespace c89c {
         llvm::Type *generate(llvm::LLVMContext &context) const override {
             return llvm::PointerType::getUnqual(m_element->generate(context));
         }
+
+        bool equal(const Type &other) const override {
+            if (Type::equal(other)) {
+                const auto &other_ref = static_cast<const PointerType &>(other); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+                return m_element->equal(*other_ref.m_element);
+            }
+            return false;
+        }
+        bool compatible(const Type &other) const override;
     private:
         std::unique_ptr<Type> m_element;
     };
@@ -131,7 +161,7 @@ namespace c89c {
         ArrayType *clone() const override {
             return new ArrayType(*this);
         }
-        PointerType *toPointerType() const {
+        PointerType *decay() const override {
             return new PointerType(std::unique_ptr<Type>(m_element->clone()));
         }
         llvm::Type *generate(llvm::LLVMContext &context) const override {
@@ -141,13 +171,8 @@ namespace c89c {
         bool isArrayType() const override { return true; }
         bool isIncompleteType() const override { return m_incomplete; }
 
-        bool equal(const Type &other) const override {
-            if (Type::equal(other)) {
-                const auto &other_ref = static_cast<const ArrayType &>(other); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-                return m_num == other_ref.m_num && m_element->equal(*other_ref.m_element);
-            }
-            return false;
-        }
+        bool equal(const Type &other) const override;
+        bool compatible(const Type &other) const override;
     private:
         std::unique_ptr<Type> m_element;
         uint64_t m_num;
@@ -156,11 +181,14 @@ namespace c89c {
 
     class FunctionType: public Type {
     public:
-        FunctionType(std::unique_ptr<Type> &&ret, std::vector<std::unique_ptr<Type>> &&args, bool var_arg):
-                m_return(std::move(ret)), m_args(std::move(args)), m_var_arg(var_arg) {}
+        FunctionType(std::unique_ptr<Type> &&ret, std::vector<std::unique_ptr<Type>> &&args,
+                bool var_arg, bool old_style):
+                m_return(std::move(ret)), m_args(std::move(args)),
+                m_var_arg(var_arg), m_old_style(old_style) {}
 
         FunctionType(const FunctionType &other):
-                Type(other), m_return(std::unique_ptr<Type>(other.m_return->clone())), m_var_arg(other.m_var_arg) {
+                Type(other), m_return(std::unique_ptr<Type>(other.m_return->clone())),
+                m_var_arg(other.m_var_arg), m_old_style(other.m_old_style) {
             for (const auto &arg: other.m_args)
                 m_args.emplace_back(arg->clone());
         }
@@ -169,7 +197,7 @@ namespace c89c {
         FunctionType *clone() const override {
             return new FunctionType(*this);
         }
-        PointerType *toPointerType() const {
+        PointerType *decay() const override {
             return new PointerType(std::unique_ptr<Type>(clone()));
         }
         llvm::Type *generate(llvm::LLVMContext &context) const override;
@@ -177,14 +205,26 @@ namespace c89c {
         bool isFunctionType() const override { return true; }
 
         bool equal(const Type &other) const override;
+        bool compatible(const Type &other) const override;
 
         std::unique_ptr<Type> &returnType() {
             return m_return;
         }
+        bool isOldStyle() const {
+            return m_old_style;
+        }
+        bool isOldStyleDefinition() const {
+            return !m_var_arg;
+        }
+
+    protected:
+        static bool oldStyleCompatibleWithNewStyle(const c89c::FunctionType &oldStyle, const c89c::FunctionType &newStyle);
+
     private:
         std::unique_ptr<Type> m_return;
         std::vector<std::unique_ptr<Type>> m_args;
         bool m_var_arg;
+        bool m_old_style;
     };
 }
 

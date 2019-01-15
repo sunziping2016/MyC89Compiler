@@ -1,5 +1,5 @@
-#ifndef MYC89COMPILER_CONTEXT_H
-#define MYC89COMPILER_CONTEXT_H
+#ifndef MYC89COMPILER_DRIVER_H
+#define MYC89COMPILER_DRIVER_H
 
 #include <unordered_map>
 #include <string>
@@ -18,15 +18,19 @@
 namespace c89c {
     class Value;
     class Type;
-
-
-    typedef std::variant<std::unique_ptr<Value>, std::unique_ptr<Type>> Item;
-    struct Scope {
-        std::unordered_map<std::string, Item> names;
-    };
+    class FunctionType;
 
     class Driver {
     public:
+        typedef std::variant<std::unique_ptr<Value>, std::unique_ptr<Type>> NameItem;
+        struct Scope {
+            std::unordered_map<std::string, NameItem> names;
+        };
+        struct FunctionPrototypeItem {
+            enum Linkage {EXTERNAL, INTERNAL} linkage;
+            std::unique_ptr<FunctionType> type;
+        };
+
         explicit Driver(const llvm::StringRef &module_id):
                 m_module(module_id, m_context), m_want_identifier(false),
                 m_function(nullptr), m_block(nullptr) {
@@ -40,9 +44,18 @@ namespace c89c {
         Scope &topScope() {
             return m_scopes.back();
         }
-        std::unordered_map<std::string, Item>::iterator findInAllScope(const std::string &name);
-        std::unordered_map<std::string, Item>::iterator allScopeEnd() {
+        std::unordered_map<std::string, NameItem>::iterator findInAllScope(const std::string &name);
+        std::unordered_map<std::string, NameItem>::iterator allScopeEnd() {
             return m_scopes.front().names.end();
+        }
+        std::unordered_map<std::string, FunctionPrototypeItem>::iterator findInAllFunctions(const std::string &name) {
+            return m_functions.find(name);
+        }
+        std::unordered_map<std::string, FunctionPrototypeItem>::iterator allFunctionsEnd() {
+            return m_functions.end();
+        }
+        void addToAllFunctions(const std::string &name, FunctionPrototypeItem &&item) {
+            m_functions[name] = std::move(item);
         }
 
         bool wantIdentifier() const {
@@ -73,6 +86,7 @@ namespace c89c {
         llvm::Module m_module;
 
         std::vector<Scope> m_scopes;
+        std::unordered_map<std::string, FunctionPrototypeItem> m_functions;
         bool m_want_identifier;
 
         llvm::Function *m_function;
@@ -80,4 +94,4 @@ namespace c89c {
     };
 }
 
-#endif //MYC89COMPILER_CONTEXT_H
+#endif //MYC89COMPILER_DRIVER_H

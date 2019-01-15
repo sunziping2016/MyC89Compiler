@@ -1,3 +1,5 @@
+#include <utility>
+
 #ifndef MYC89COMPILER_DECLARATION_H
 #define MYC89COMPILER_DECLARATION_H
 
@@ -9,6 +11,7 @@
 #include <vector>
 
 #include <llvm/IR/Value.h>
+#include <llvm/IR/Function.h>
 
 namespace c89c {
     class Type;
@@ -224,9 +227,28 @@ namespace c89c {
 
     class Value {
     public:
-        virtual llvm::Value *get() = 0;
+        explicit Value(std::unique_ptr<Type> &&type): m_type(std::move(type)) {}
+
+        virtual llvm::Value *get(Driver &driver) = 0;
+        std::unique_ptr<Type> &type() {
+            return m_type;
+        }
     protected:
         std::unique_ptr<Type> m_type;
+    };
+
+    class FunctionValue: public Value {
+    public:
+        enum Linkage {EXTERNAL, INTERNAL};
+
+        FunctionValue(std::string name, std::unique_ptr<Type> &&type, Linkage linage)
+            : Value(std::move(type)), m_name(std::move(name)), m_linkage(linage), m_value(nullptr) {}
+
+        llvm::Function *get(Driver &driver) override;
+    private:
+        std::string m_name;
+        Linkage m_linkage;
+        llvm::Function *m_value;
     };
 }
 

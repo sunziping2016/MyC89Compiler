@@ -154,14 +154,16 @@ IS                      (u|U|l|L)*
 L?'(\\.|[^\\'])+'       {
     // TODO: L support (needs convert from utf-8 to unicode)
     NC;
-    int v = 0, begin = 1;
-    char ch;
-    while ((begin = parseEscape(yytext, begin, yyleng - 1, ch)) != yyleng - 1) {
+    if (yytext[0] != 'L') {
+        int v = 0, begin = 1;
+        char ch;
+        while ((begin = parseEscape(yytext, begin, yyleng - 1, ch)) != yyleng - 1) {
+            v = (v << 8) + static_cast<unsigned char>(ch);
+        }
         v = (v << 8) + static_cast<unsigned char>(ch);
+        value->emplace<std::unique_ptr<Expression>>(std::make_unique<CharacterConstant>(v));
+        return token::CONSTANT;
     }
-    v = (v << 8) + static_cast<unsigned char>(ch);
-    value->emplace<std::unique_ptr<Expression>>(std::make_unique<CharacterConstant>(v));
-    return token::CONSTANT;
 }
 
 {D}+{E}{FS}?            NC; return token::CONSTANT;
