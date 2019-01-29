@@ -263,8 +263,6 @@ void c89c::InitDeclarator::generate(const c89c::DeclarationSpecifiers &specifier
             throw SemanticError("function cannot return array type");
         if (return_type->isFunctionType())
             throw SemanticError("function cannot return function type");
-        if (return_type->isIncompleteType() && !return_type->isVoidType())
-            throw SemanticError("incomplete result type in function definition");
         auto linkage = specifiers.m_storage_class == StorageClassSpecifier::STATIC ?
                 Driver::FunctionPrototypeItem::INTERNAL : Driver::FunctionPrototypeItem::EXTERNAL;
         auto function_iter = driver.findInAllFunctions(m_declarator->identifier());
@@ -297,6 +295,8 @@ void c89c::InitDeclarator::generate(const c89c::DeclarationSpecifiers &specifier
             } else
                 throw SemanticError("redefinition of \'" + m_declarator->identifier() + "\' as different kind of symbol");
         }
+    } else {
+
     }
 }
 
